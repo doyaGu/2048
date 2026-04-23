@@ -77,19 +77,23 @@ endfunction()
 
 game2048_configure_raylib()
 
+set(GAME2048_INCLUDE_DIRS
+    "${CMAKE_CURRENT_SOURCE_DIR}/src"
+)
+
 add_library(game2048_core
-    src/board.cpp
-    src/board_fast.cpp
-    src/game.cpp
-    src/input_bindings.cpp
-    src/interaction_session.cpp
-    src/rng.cpp
-    src/stats.cpp
+    src/core/board.cpp
+    src/core/board_fast.cpp
+    src/core/game.cpp
+    src/input/input_bindings.cpp
+    src/app/interaction_session.cpp
+    src/core/rng.cpp
+    src/shared/stats.cpp
 )
 
 target_include_directories(game2048_core
     PUBLIC
-        "${CMAKE_CURRENT_SOURCE_DIR}/src"
+    ${GAME2048_INCLUDE_DIRS}
 )
 
 game2048_apply_warnings(game2048_core)
@@ -105,7 +109,7 @@ add_library(game2048_ai
 
 target_include_directories(game2048_ai
     PUBLIC
-        "${CMAKE_CURRENT_SOURCE_DIR}/src"
+    ${GAME2048_INCLUDE_DIRS}
 )
 
 target_link_libraries(game2048_ai PUBLIC game2048_core)
@@ -114,19 +118,26 @@ game2048_apply_warnings(game2048_ai)
 
 add_executable(game2048
     src/main.cpp
-    src/app.cpp
-    src/animation.cpp
-    src/cli_options.cpp
-    src/gamepad_input.cpp
-    src/input.cpp
-    src/input_source.cpp
-    src/input_system.cpp
-    src/pointer_input.cpp
-    src/layout.cpp
-    src/renderer.cpp
-    src/ui.cpp
+    src/app/ai_advisor.cpp
+    src/app/app.cpp
+    src/app/hud_mapper.cpp
+    src/ui/animation.cpp
+    src/app/cli_options.cpp
+    src/app/game_controller.cpp
+    src/input/gamepad_input.cpp
+    src/input/input.cpp
+    src/input/input_source.cpp
+    src/input/input_system.cpp
+    src/input/pointer_input.cpp
+    src/ui/layout.cpp
+    src/ui/overlays.cpp
+    src/ui/panels.cpp
+    src/ui/renderer.cpp
+    src/ui/widgets.cpp
+    src/ui/ui.cpp
 )
 
+target_include_directories(game2048 PRIVATE ${GAME2048_INCLUDE_DIRS})
 target_link_libraries(game2048 PRIVATE game2048_ai game2048_raylib_dep)
 game2048_apply_warnings(game2048)
 
@@ -138,25 +149,32 @@ if (GAME2048_BUILD_TESTS)
     enable_testing()
 
     add_executable(game2048_tests
-        src/animation.cpp
-        src/cli_options.cpp
+        src/app/ai_advisor.cpp
+        src/app/hud_mapper.cpp
+        src/ui/animation.cpp
+        src/app/cli_options.cpp
+        src/app/game_controller.cpp
         tests/test_cli_options.cpp
-        src/gamepad_input.cpp
-        src/input_system.cpp
-        src/layout.cpp
-        src/pointer_input.cpp
+        src/input/gamepad_input.cpp
+        src/input/input_system.cpp
+        src/ui/layout.cpp
+        src/input/pointer_input.cpp
         tests/test_animation.cpp
+        tests/test_ai_advisor.cpp
         tests/test_main.cpp
         tests/test_moves.cpp
         tests/test_board_equivalence.cpp
         tests/test_eval.cpp
         tests/test_game.cpp
+        tests/test_game_controller.cpp
+        tests/test_hud_mapper.cpp
         tests/test_interaction.cpp
         tests/test_input_system.cpp
         tests/test_pointer_input.cpp
         tests/test_gamepad_input.cpp
     )
 
+    target_include_directories(game2048_tests PRIVATE ${GAME2048_INCLUDE_DIRS})
     target_link_libraries(game2048_tests PRIVATE game2048_ai game2048_raylib_dep)
     game2048_apply_warnings(game2048_tests)
 

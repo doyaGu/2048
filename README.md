@@ -30,35 +30,53 @@ game2048/
   README.md
   src/
     main.cpp
-    config.h
-    app.h / app.cpp
-    game.h / game.cpp
-    board.h / board.cpp
-    board_fast.h / board_fast.cpp
-    rng.h / rng.cpp
-    input.h / input.cpp
-    input_types.h
-    input_bindings.h / input_bindings.cpp
-    input_source.h / input_source.cpp
-    pointer_input.h / pointer_input.cpp
-    gamepad_input.h / gamepad_input.cpp
-    input_system.h / input_system.cpp
-    interaction_session.h / interaction_session.cpp
-    renderer.h / renderer.cpp
-    animation.h / animation.cpp
-    layout.h / layout.cpp
-    ui.h / ui.cpp
-    stats.h / stats.cpp
-    profiler.h
+    shared/
+      profiler.h
+      stats.h / stats.cpp
     ai/
       ai_engine.h / ai_engine.cpp
+      benchmark.h / benchmark.cpp
+      evaluator.h / evaluator.cpp
       expectimax.h / expectimax.cpp
       greedy.h / greedy.cpp
-      evaluator.h / evaluator.cpp
       transposition_table.h / transposition_table.cpp
-      benchmark.h / benchmark.cpp
+    app/
+      ai_advisor.h / ai_advisor.cpp
+      app.h / app.cpp
+      cli_options.h / cli_options.cpp
+      game_controller.h / game_controller.cpp
+      hud_mapper.h / hud_mapper.cpp
+      interaction_session.h / interaction_session.cpp
+      session_types.h
+      view_state.h
+    core/
+      board.h / board.cpp
+      board_fast.h / board_fast.cpp
+      config.h
+      game.h / game.cpp
+      rng.h / rng.cpp
+    input/
+      gamepad_input.h / gamepad_input.cpp
+      input.h / input.cpp
+      input_bindings.h / input_bindings.cpp
+      input_source.h / input_source.cpp
+      input_system.h / input_system.cpp
+      input_types.h
+      pointer_input.h / pointer_input.cpp
+    ui/
+      animation.h / animation.cpp
+      layout.h / layout.cpp
+      names.h
+      overlays.h / overlays.cpp
+      panels.h / panels.cpp
+      renderer.h / renderer.cpp
+      theme.h
+      ui.h / ui.cpp
+      widgets.h / widgets.cpp
   tests/
+    test_ai_advisor.cpp
     test_framework.h
+    test_game_controller.cpp
     test_main.cpp
     test_moves.cpp
     test_board_equivalence.cpp
@@ -135,15 +153,46 @@ Interaction notes:
 
 ## Architecture
 
-### 1. Logic / Render split
+### 1. Layered modules
+
+The codebase is organized around explicit layers instead of one flat `src/` bucket:
+
+- `src/core`: deterministic rules, board state, RNG, and gameplay model
+- `src/ai`: search, evaluation, benchmark, and AI engine selection
+- `src/input`: raw device polling plus normalized input routing
+- `src/ui`: layout, renderer, panels, overlays, animation, and UI metadata
+- `src/app`: runtime orchestration, session policy, controller/advisor wrappers, and HUD mapping
+
+Dependency direction is intentionally narrow:
+
+- `core` depends on no higher layer
+- `ai` depends on `core`
+- `shared` contains cross-cutting value types and utilities that may be reused by multiple layers without becoming a new behavior-owning subsystem
+- `input` depends on lightweight app state enums and UI layout geometry, but not on the full app loop
+- `ui` depends on UI-facing view state, not on `Game`, `AIEngine`, or `InteractionSession` internals
+- `app` is the composition root that wires everything together
+
+### 2. Include policy
+
+All project targets now include only `src/` as the project include root. Internal headers are referenced with explicit root-relative paths such as:
+
+- `core/board.h`
+- `app/game_controller.h`
+- `input/input_system.h`
+- `ui/layout.h`
+
+This avoids relying on CMake to expose each subdirectory as a fallback include root and makes cross-layer dependencies visible in code review.
+
+### 3. Logic / Render split
 
 - `board.*`, `board_fast.*`, `game.*`, `rng.*`, `stats.*`, and the AI stack are raylib-free.
 - `renderer.*`, `ui.*`, `layout.*`, `input.*`, and `animation.*` are the only raylib-facing pieces.
 - `input_source.*` polls raw raylib state, while `pointer_input.*`, `gamepad_input.*`, and `input_system.*` normalize devices into a single per-frame `InputFrame`.
-- `interaction_session.*` is the bridge between the deterministic core and the raylib loop.
+- `game_controller.*` owns gameplay state plus best-score persistence, `ai_advisor.*` owns AI selection plus cached recommendations, and `interaction_session.*` owns overlay and input policy.
+- `hud_mapper.*` converts app/runtime state into the immutable `HUDState` consumed by UI rendering.
 - The UI consumes immutable game state snapshots plus move traces. It does not decide rules.
 
-### 2. Dual board model
+### 4. Dual board model
 
 `Board` is the readable reference model:
 
@@ -157,7 +206,7 @@ Interaction notes:
 - each cell stores `log2(tile)` in 4 bits, empty is `0`
 - supports cheap copies, hashing, move generation, and table-driven row transitions
 
-### 3. Game state
+### 5. Game state
 
 `Game` owns:
 
@@ -179,7 +228,7 @@ Spawning stays outside raw board movement. A tile is only spawned after a valid 
 
 This keeps overlay behavior, input buffering, and AI pause/resume rules out of `Game`.
 
-### 4. Unified input flow
+### 6. Unified input flow
 
 The input stack is layered so new devices can be added without touching rule code:
 
@@ -258,7 +307,7 @@ The evaluator is modular and exposes a per-feature breakdown:
 - weighted snake pattern (4 templates, best selected)
 - trap penalty
 
-All feature toggles and weights live in `src/config.h` and `src/ai/evaluator.h`.
+All feature toggles and weights live in `src/core/config.h` and `src/ai/evaluator.h`.
 
 ## Performance Notes
 
@@ -307,6 +356,8 @@ Input-specific coverage includes:
 - single-frame intent collapsing
 - overlay-specific gamepad command semantics
 - adaptive touch HUD layout exposure
+- isolated `GameController` persistence behavior via injected best-score paths
+- isolated `AIAdvisor` cache reset and agent/config transition behavior
 
 Covered areas:
 

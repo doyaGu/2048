@@ -13,6 +13,7 @@
 #include "ai/benchmark.h"
 #include "animation.h"
 #include "board_fast.h"
+#include "cli_options.h"
 #include "game.h"
 #include "input_source.h"
 #include "input_system.h"
@@ -24,14 +25,6 @@
 namespace game2048 {
 
 namespace {
-
-struct CliOptions {
-    std::optional<std::size_t> benchmarkGames;
-    std::uint64_t seed = kDefaultSeed;
-    ai::AgentKind agent = ai::AgentKind::Expectimax;
-    ai::SearchConfig search {};
-    std::optional<std::string> csvPath;
-};
 
 std::filesystem::path BestScorePath() {
     return std::filesystem::current_path() / "best_score.txt";
@@ -62,47 +55,12 @@ AnimationSpeed NextSpeed(AnimationSpeed current) {
     return AnimationSpeed::Normal;
 }
 
-CliOptions ParseArgs(int argc, char** argv) {
-    CliOptions options;
-    for (int index = 1; index < argc; ++index) {
-        const std::string arg = argv[index];
-        auto requireValue = [&](const char* name) -> std::string {
-            if (index + 1 >= argc) {
-                throw std::runtime_error(std::string("missing value for ") + name);
-            }
-            return argv[++index];
-        };
-
-        if (arg == "--benchmark") {
-            options.benchmarkGames = static_cast<std::size_t>(std::stoul(requireValue("--benchmark")));
-        } else if (arg == "--seed") {
-            options.seed = std::stoull(requireValue("--seed"));
-        } else if (arg == "--ai") {
-            const auto value = requireValue("--ai");
-            if (value == "greedy") {
-                options.agent = ai::AgentKind::Greedy;
-            } else if (value == "expectimax") {
-                options.agent = ai::AgentKind::Expectimax;
-            } else {
-                throw std::runtime_error("unknown AI: " + value);
-            }
-        } else if (arg == "--depth") {
-            options.search.maxDepth = std::stoi(requireValue("--depth"));
-        } else if (arg == "--time-budget-ms") {
-            options.search.timeBudgetMs = std::stoi(requireValue("--time-budget-ms"));
-        } else if (arg == "--csv") {
-            options.csvPath = requireValue("--csv");
-        }
-    }
-    return options;
-}
-
 }  // namespace
 
 int App::Run(int argc, char** argv) {
     CliOptions options;
     try {
-        options = ParseArgs(argc, argv);
+        options = ParseCliOptions(argc, argv);
     } catch (const std::exception& ex) {
         std::cerr << ex.what() << '\n';
         return 1;

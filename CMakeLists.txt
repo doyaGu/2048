@@ -116,6 +116,7 @@ add_executable(game2048
     src/main.cpp
     src/app.cpp
     src/animation.cpp
+    src/cli_options.cpp
     src/gamepad_input.cpp
     src/input.cpp
     src/input_source.cpp
@@ -137,6 +138,8 @@ if (GAME2048_BUILD_TESTS)
     enable_testing()
 
     add_executable(game2048_tests
+        src/cli_options.cpp
+        tests/test_cli_options.cpp
         src/gamepad_input.cpp
         src/input_system.cpp
         src/layout.cpp

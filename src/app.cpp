@@ -14,7 +14,8 @@
 #include "animation.h"
 #include "board_fast.h"
 #include "game.h"
-#include "input.h"
+#include "input_source.h"
+#include "input_system.h"
 #include "interaction_session.h"
 #include "layout.h"
 #include "renderer.h"
@@ -135,6 +136,8 @@ int App::Run(int argc, char** argv) {
     engine.Expectimax().SetConfig(options.search);
 
     AnimationController animation;
+    InputSource inputSource;
+    InputSystem inputSystem;
     Renderer renderer;
     UI ui;
 
@@ -142,6 +145,7 @@ int App::Run(int argc, char** argv) {
     SearchStats lastSearch {};
     ai::MoveDecision recommendation {};
     bool recommendationDirty = true;
+    bool touchHudActive = false;
 
     auto invalidateRecommendation = [&]() {
         recommendation = {};
@@ -179,16 +183,21 @@ int App::Run(int argc, char** argv) {
 
         const bool animationBlocksInput = animation.Active() && animation.Speed() != AnimationSpeed::Turbo;
 
+        const RawInputState rawInput = inputSource.Poll();
+        if (rawInput.pointers[0].connected && rawInput.pointers[0].isTouch) {
+            touchHudActive = true;
+        }
+        const auto layout = ComputeLayout(GetScreenWidth(), GetScreenHeight(), touchHudActive);
+        const auto frame = inputSystem.BuildFrame(rawInput, layout, touchHudActive, animationBlocksInput, session.Overlay());
+
         InteractionInput input {};
-        input.nowSeconds = GetTime();
+        input.nowSeconds = rawInput.nowSeconds;
         input.animationBlocksInput = animationBlocksInput;
         input.gameOver = game.IsGameOver();
         input.reached2048Ever = game.HasReached2048Ever();
-        input.pressedMove = PollMoveInput();
-        input.heldMove = PollMoveInputHeld();
-        if (!animation.Active()) {
-            input.command = PollCommandInput();
-        }
+        input.command = frame.command;
+        input.pressedMove = frame.pressedMove;
+        input.heldMove = frame.heldMove;
 
         const auto actions = session.Tick(input);
 
@@ -235,7 +244,6 @@ int App::Run(int argc, char** argv) {
             recommendationDirty = false;
         }
 
-        const auto layout = ComputeLayout(GetScreenWidth(), GetScreenHeight());
         const auto breakdown = engine.Expectimax().GetEvaluator().Breakdown(FastBoard::FromReference(game.GetBoard()));
         const HUDState hud {
             game.Score(),

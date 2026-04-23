@@ -1,8 +1,8 @@
 #pragma once
 
-#include "animation.h"
-#include "board.h"
-#include "layout.h"
+#include "ui/animation.h"
+#include "core/board.h"
+#include "ui/layout.h"
 
 namespace game2048 {
 

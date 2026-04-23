@@ -1,9 +1,11 @@
-#include "animation.h"
+#include "ui/animation.h"
 
 #include <algorithm>
 #include <cmath>
 
 #include <raylib.h>
+
+#include "ui/theme.h"
 
 namespace game2048 {
 
@@ -12,11 +14,11 @@ namespace {
 float DurationForSpeed(AnimationSpeed speed) {
     switch (speed) {
         case AnimationSpeed::Normal:
-            return static_cast<float>(kDefaultAnimationMs) / 1000.0F;
+            return static_cast<float>(theme::kDefaultAnimationMs) / 1000.0F;
         case AnimationSpeed::Slow:
-            return static_cast<float>(kSlowAnimationMs) / 1000.0F;
+            return static_cast<float>(theme::kSlowAnimationMs) / 1000.0F;
         case AnimationSpeed::Turbo:
-            return static_cast<float>(kTurboAnimationMs) / 1000.0F;
+            return static_cast<float>(theme::kTurboAnimationMs) / 1000.0F;
     }
     return 0.0F;
 }
@@ -94,7 +96,7 @@ float AnimationController::SpawnProgress() const {
     if (duration_ <= 0.0F) {
         return 1.0F;
     }
-    const float start = duration_ * kAnimSpawnPhaseStart;
+    const float start = duration_ * theme::kAnimSpawnPhaseStart;
     const float t = std::clamp((elapsed_ - start) / (duration_ - start), 0.0F, 1.0F);
     return EaseOutBack(t);
 }
@@ -107,16 +109,16 @@ float AnimationController::MergeScale(const CellCoord& cell) const {
         if (!MatchesCell(merge.cell, cell)) {
             continue;
         }
-        const float start = duration_ * kAnimMergePhaseStart;
+        const float start = duration_ * theme::kAnimMergePhaseStart;
         const float t = std::clamp((elapsed_ - start) / (duration_ - start), 0.0F, 1.0F);
-        return 1.0F + kAnimMergeBounceMag * std::sin(t * 3.1415926F);
+        return 1.0F + theme::kAnimMergeBounceMag * std::sin(t * 3.1415926F);
     }
     return 1.0F;
 }
 
 float AnimationController::SpawnScale(const CellCoord& cell) const {
     if (snapshot_.spawn.has_value() && MatchesCell(snapshot_.spawn->cell, cell)) {
-        return kAnimSpawnMinScale + (1.0F - kAnimSpawnMinScale) * SpawnProgress();
+        return theme::kAnimSpawnMinScale + (1.0F - theme::kAnimSpawnMinScale) * SpawnProgress();
     }
     return 1.0F;
 }

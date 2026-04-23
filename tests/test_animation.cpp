@@ -1,4 +1,4 @@
-#include "../src/animation.h"
+#include "../src/ui/animation.h"
 #include "test_framework.h"
 
 namespace {

@@ -1,10 +1,14 @@
-#include "layout.h"
+#include "ui/layout.h"
 
 #include <algorithm>
 
 namespace game2048 {
 
 namespace {
+
+constexpr std::size_t TileIndex(int row, int col) {
+    return static_cast<std::size_t>(row * kBoardSize + col);
+}
 
 constexpr float kOuterPadding = 28.0F;
 constexpr float kTopBandGap = 16.0F;
@@ -48,11 +52,11 @@ Rectangle MakeBoardGestureRect(const Rectangle& boardRect, bool showTouchHud) {
 }
 
 void AddControl(LayoutMetrics& layout, Rectangle rect, ControlId id) {
-    if (layout.controlCount >= static_cast<int>(layout.controlRects.size())) {
+    if (layout.controlCount >= layout.controlRects.size()) {
         return;
     }
-    layout.controlRects[static_cast<std::size_t>(layout.controlCount)] = rect;
-    layout.controlIds[static_cast<std::size_t>(layout.controlCount)] = id;
+    layout.controlRects[layout.controlCount] = rect;
+    layout.controlIds[layout.controlCount] = id;
     ++layout.controlCount;
 }
 
@@ -167,13 +171,13 @@ LayoutMetrics ComputeLayout(int screenWidth, int screenHeight, bool showTouchHud
     layout.tileGap = std::min(rawTileGap, boardSize / static_cast<float>(kBoardSize + 1));
     layout.tileSize = std::max(0.0F, (boardSize - layout.tileGap * (kBoardSize + 1)) / static_cast<float>(kBoardSize));
 
-    for (int row = 0; row < kBoardSize; ++row) {
-        for (int col = 0; col < kBoardSize; ++col) {
+    for (std::size_t row = 0; row < static_cast<std::size_t>(kBoardSize); ++row) {
+        for (std::size_t col = 0; col < static_cast<std::size_t>(kBoardSize); ++col) {
             const float x = layout.boardRect.x + layout.tileGap +
                             static_cast<float>(col) * (layout.tileSize + layout.tileGap);
             const float y = layout.boardRect.y + layout.tileGap +
                             static_cast<float>(row) * (layout.tileSize + layout.tileGap);
-            layout.tileRects[row * kBoardSize + col] = {x, y, layout.tileSize, layout.tileSize};
+            layout.tileRects[TileIndex(static_cast<int>(row), static_cast<int>(col))] = {x, y, layout.tileSize, layout.tileSize};
         }
     }
 
@@ -208,11 +212,11 @@ LayoutMetrics ComputeLayout(int screenWidth, int screenHeight, bool showTouchHud
     return layout;
 }
 
-int OverlayActionCount(OverlayMode overlayMode) {
+std::size_t OverlayActionCount(OverlayMode overlayMode) {
     return overlayMode == OverlayMode::Help ? 1 : 2;
 }
 
-Rectangle OverlayActionRect(const LayoutMetrics& layout, OverlayMode overlayMode, int index) {
+Rectangle OverlayActionRect(const LayoutMetrics& layout, OverlayMode overlayMode, std::size_t index) {
     if (overlayMode == OverlayMode::Help) {
         if (index != 0) {
             return {};
@@ -227,10 +231,10 @@ Rectangle OverlayActionRect(const LayoutMetrics& layout, OverlayMode overlayMode
         };
     }
 
-    if (index < 0 || index >= layout.overlayActionCount) {
+    if (index >= layout.overlayActionCount) {
         return {};
     }
-    return layout.overlayActionRects[static_cast<std::size_t>(index)];
+    return layout.overlayActionRects[index];
 }
 
 }  // namespace game2048

@@ -1,12 +1,13 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 
 #include <raylib.h>
 
-#include "config.h"
-#include "input_types.h"
-#include "interaction_session.h"
+#include "core/config.h"
+#include "input/input_types.h"
+#include "app/session_types.h"
 
 namespace game2048 {
 
@@ -24,14 +25,14 @@ struct LayoutMetrics {
     std::array<Rectangle, kCellCount> tileRects {};
     std::array<Rectangle, 16> controlRects {};
     std::array<ControlId, 16> controlIds {};
-    int controlCount = 0;
+    std::size_t controlCount = 0;
     std::array<Rectangle, 3> overlayActionRects {};
-    int overlayActionCount = 0;
+    std::size_t overlayActionCount = 0;
     bool showTouchHud = false;
 };
 
 LayoutMetrics ComputeLayout(int screenWidth, int screenHeight, bool showTouchHud = false);
-int OverlayActionCount(OverlayMode overlayMode);
-Rectangle OverlayActionRect(const LayoutMetrics& layout, OverlayMode overlayMode, int index);
+std::size_t OverlayActionCount(OverlayMode overlayMode);
+Rectangle OverlayActionRect(const LayoutMetrics& layout, OverlayMode overlayMode, std::size_t index);
 
 }  // namespace game2048

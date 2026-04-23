@@ -1,4 +1,4 @@
-#include "renderer.h"
+#include "ui/renderer.h"
 
 #include <array>
 #include <cmath>
@@ -6,39 +6,14 @@
 
 #include <raymath.h>
 
+#include "ui/theme.h"
+
 namespace game2048 {
 
 namespace {
 
-struct TileColorEntry { int value; Color fill; };
-
-// Data table: tile face value → background colour.  Extend here to add new tiers.
-static constexpr std::array<TileColorEntry, 13> kTileColorMap {{
-    {0,    {200, 190, 178, 255}},  // empty cell
-    {2,    {240, 232, 222, 255}},
-    {4,    {235, 218, 194, 255}},
-    {8,    {249, 178, 109, 255}},
-    {16,   {252, 148,  86, 255}},
-    {32,   {252, 110,  72, 255}},
-    {64,   {252,  72,  36, 255}},
-    {128,  {249, 212,  92, 255}},
-    {256,  {249, 206,  62, 255}},
-    {512,  {249, 200,  36, 255}},
-    {1024, {249, 194,  18, 255}},
-    {2048, { 56, 202, 168, 255}},  // teal — win tile stands apart
-    {4096, {118,  82, 214, 255}},  // vivid purple
-}};
-static constexpr Color kHighTileColor {92, 68, 168, 255};  // deep purple for 8192+
-
-Color TileFillColor(int value) {
-    for (const auto& entry : kTileColorMap) {
-        if (entry.value == value) return entry.fill;
-    }
-    return kHighTileColor;
-}
-
-Color TileTextColor(int value) {
-    return value <= 4 ? Color{119, 110, 101, 255} : RAYWHITE;
+constexpr std::size_t TileIndex(int row, int col) {
+    return static_cast<std::size_t>(row * kBoardSize + col);
 }
 
 void DrawCenteredText(const std::string& text, Rectangle rect, Color color) {
@@ -67,7 +42,7 @@ Rectangle ScaleRect(Rectangle rect, float scale) {
 
 void DrawTile(Rectangle rect, int value, float scale, unsigned char alpha = 255) {
     const Rectangle scaled = ScaleRect(rect, scale);
-    const Color fill = TileFillColor(value);
+    const Color fill = theme::TileFillColor(value);
 
     // Glow rings for high-value tiles (drawn first — furthest back)
     struct GlowRing { float expansion; unsigned char alpha; };
@@ -94,7 +69,7 @@ void DrawTile(Rectangle rect, int value, float scale, unsigned char alpha = 255)
     tileFill.a = alpha;
     DrawRectangleRounded(scaled, 0.16F, 8, tileFill);
     if (value != 0) {
-        Color text = TileTextColor(value);
+        Color text = theme::TileTextColor(value);
         text.a = alpha;
         DrawCenteredText(std::to_string(value), scaled, text);
     }
@@ -128,7 +103,7 @@ void Renderer::DrawBoard(const LayoutMetrics& layout, const Board& board, const 
     for (int row = 0; row < kBoardSize; ++row) {
         for (int col = 0; col < kBoardSize; ++col) {
             const CellCoord cell {row, col};
-            const Rectangle rect = shaken.tileRects[row * kBoardSize + col];
+            const Rectangle rect = shaken.tileRects[TileIndex(row, col)];
             const int value = board.At(row, col);
             if (value == 0) {
                 continue;
@@ -153,15 +128,15 @@ void Renderer::DrawBoard(const LayoutMetrics& layout, const Board& board, const 
     const float t = animation.SlideProgress();
     const auto& snapshot = animation.Snapshot();
     for (const auto& move : snapshot.trace.moves) {
-        const Rectangle fromRect = shaken.tileRects[move.from.row * kBoardSize + move.from.col];
-        const Rectangle toRect   = shaken.tileRects[move.to.row   * kBoardSize + move.to.col];
+        const Rectangle fromRect = shaken.tileRects[TileIndex(move.from.row, move.from.col)];
+        const Rectangle toRect   = shaken.tileRects[TileIndex(move.to.row, move.to.col)];
         Rectangle current {
             Lerp(fromRect.x, toRect.x, t),
             Lerp(fromRect.y, toRect.y, t),
             fromRect.width,
             fromRect.height
         };
-        DrawTile(current, move.value, 1.0F, static_cast<unsigned char>(255.0F * (1.0F - kAnimSlideFadeRate * t)));
+        DrawTile(current, move.value, 1.0F, static_cast<unsigned char>(255.0F * (1.0F - theme::kAnimSlideFadeRate * t)));
     }
 }
 

@@ -1,5 +1,5 @@
-#include "../src/layout.h"
-#include "../src/pointer_input.h"
+#include "../src/ui/layout.h"
+#include "../src/input/pointer_input.h"
 #include "test_framework.h"
 
 namespace {

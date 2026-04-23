@@ -1,4 +1,4 @@
-#include "../src/gamepad_input.h"
+#include "../src/input/gamepad_input.h"
 #include "test_framework.h"
 
 namespace {

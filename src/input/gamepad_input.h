@@ -2,8 +2,8 @@
 
 #include <optional>
 
-#include "input_bindings.h"
-#include "input_types.h"
+#include "input/input_bindings.h"
+#include "input/input_types.h"
 
 namespace game2048 {
 

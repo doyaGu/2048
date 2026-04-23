@@ -1,6 +1,6 @@
 #pragma once
 
-#include "input_types.h"
+#include "input/input_types.h"
 
 namespace game2048 {
 

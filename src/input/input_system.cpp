@@ -1,4 +1,4 @@
-#include "input_system.h"
+#include "input/input_system.h"
 
 namespace game2048 {
 
@@ -37,7 +37,7 @@ ControlId OverlayPointerControl(const RawPointerState& pointer, const LayoutMetr
     if (!pointer.connected || !pointer.pressed) {
         return ControlId::None;
     }
-    for (int index = 0; index < OverlayActionCount(overlayMode); ++index) {
+    for (std::size_t index = 0; index < OverlayActionCount(overlayMode); ++index) {
         if (!Contains(OverlayActionRect(layout, overlayMode, index), pointer.position)) {
             continue;
         }
@@ -85,13 +85,13 @@ InputFrame InputSystem::BuildFrame(const RawInputState& raw,
         }
     }
 
-    InputCommand command = ResolveKeyboardCommand(raw);
+    ControlId gamepadPrimary = ControlId::None;
+    InputCommand command = ResolveGamepadCommand(raw, overlayMode, gamepadPrimary);
+    if (gamepadPrimary != ControlId::None) {
+        frame.primaryControl = gamepadPrimary;
+    }
     if (command == InputCommand::None) {
-        ControlId gamepadPrimary = ControlId::None;
-        command = ResolveGamepadCommand(raw, overlayMode, gamepadPrimary);
-        if (gamepadPrimary != ControlId::None) {
-            frame.primaryControl = gamepadPrimary;
-        }
+        command = ResolveKeyboardCommand(raw);
     }
     if (command != InputCommand::None) {
         frame.command = command;

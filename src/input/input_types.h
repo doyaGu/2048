@@ -4,8 +4,8 @@
 #include <cstdint>
 #include <optional>
 
-#include "board.h"
-#include "input.h"
+#include "core/board.h"
+#include "input/input.h"
 
 namespace game2048 {
 

@@ -1,4 +1,4 @@
-#include "pointer_input.h"
+#include "input/pointer_input.h"
 
 #include <cmath>
 
@@ -56,9 +56,9 @@ ControlId PointerInputRouter::HitTestControl(const RawPointerState& pointer, con
         return ControlId::None;
     }
 
-    for (int index = 0; index < layout.controlCount; ++index) {
-        if (Contains(layout.controlRects[static_cast<std::size_t>(index)], pointer.position)) {
-            return layout.controlIds[static_cast<std::size_t>(index)];
+    for (std::size_t index = 0; index < layout.controlCount; ++index) {
+        if (Contains(layout.controlRects[index], pointer.position)) {
+            return layout.controlIds[index];
         }
     }
     return ControlId::None;

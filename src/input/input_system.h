@@ -1,8 +1,8 @@
 #pragma once
 
-#include "gamepad_input.h"
-#include "interaction_session.h"
-#include "pointer_input.h"
+#include "input/gamepad_input.h"
+#include "input/pointer_input.h"
+#include "app/session_types.h"
 
 namespace game2048 {
 

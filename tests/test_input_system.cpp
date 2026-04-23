@@ -1,9 +1,9 @@
 #include <cmath>
 
-#include "../src/input_bindings.h"
-#include "../src/input_system.h"
-#include "../src/input_types.h"
-#include "../src/layout.h"
+#include "../src/input/input_bindings.h"
+#include "../src/input/input_system.h"
+#include "../src/input/input_types.h"
+#include "../src/ui/layout.h"
 #include "test_framework.h"
 
 namespace {
@@ -47,6 +47,21 @@ TEST_CASE(InputSystem_Collapses_To_One_Command_And_One_Move) {
     EXPECT_FALSE(frame.pressedMove.has_value());
 }
 
+TEST_CASE(InputSystem_GamepadCommands_TakePriority_OverKeyboardCommands) {
+    InputSystem system;
+    RawInputState raw {};
+    const auto layout = ComputeLayout(1280, 720);
+    const auto bindings = DefaultGamepadBindings();
+
+    raw.keyboard.pressedCommands[static_cast<std::size_t>(RawCommandKeySlot::Reset)] = true;
+    raw.gamepads[0].connected = true;
+    raw.gamepads[0].pressed[static_cast<std::size_t>(bindings.back)] = true;
+
+    const auto frame = system.BuildFrame(raw, layout, false, false, OverlayMode::None);
+
+    EXPECT_EQ(frame.command, game2048::InputCommand::ToggleAutoAI);
+}
+
 TEST_CASE(Layout_Desktop_Controls_ArePresent) {
     const auto layout = ComputeLayout(1280, 720);
     EXPECT_TRUE(layout.controlCount >= 4);
@@ -61,8 +76,8 @@ TEST_CASE(Layout_DesktopMode_Hides_DirectionalButtons) {
     bool sawAuto = false;
     bool sawHelp = false;
 
-    for (int index = 0; index < layout.controlCount; ++index) {
-        const auto id = layout.controlIds[static_cast<std::size_t>(index)];
+    for (std::size_t index = 0; index < layout.controlCount; ++index) {
+        const auto id = layout.controlIds[index];
         if (id == ControlId::MoveUp || id == ControlId::MoveDown ||
             id == ControlId::MoveLeft || id == ControlId::MoveRight) {
             sawMoveControl = true;
@@ -147,7 +162,7 @@ TEST_CASE(Layout_HelpOverlay_UsesSingleCenteredActionButton) {
     const float boardCenter = layout.boardRect.x + layout.boardRect.width * 0.5F;
     const float buttonCenter = helpButton.x + helpButton.width * 0.5F;
 
-    EXPECT_EQ(OverlayActionCount(OverlayMode::Help), 1);
+    EXPECT_EQ(OverlayActionCount(OverlayMode::Help), std::size_t {1});
     EXPECT_NEAR(buttonCenter, boardCenter, 0.01);
 }
 

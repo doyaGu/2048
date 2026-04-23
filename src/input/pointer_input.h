@@ -2,8 +2,8 @@
 
 #include <optional>
 
-#include "input_types.h"
-#include "layout.h"
+#include "input/input_types.h"
+#include "ui/layout.h"
 
 namespace game2048 {
 

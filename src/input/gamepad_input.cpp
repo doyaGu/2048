@@ -1,4 +1,4 @@
-#include "gamepad_input.h"
+#include "input/gamepad_input.h"
 
 #include <cmath>
 

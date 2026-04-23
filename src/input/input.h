@@ -2,7 +2,7 @@
 
 #include <optional>
 
-#include "board.h"
+#include "core/board.h"
 
 namespace game2048 {
 

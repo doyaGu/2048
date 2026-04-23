@@ -208,4 +208,29 @@ LayoutMetrics ComputeLayout(int screenWidth, int screenHeight, bool showTouchHud
     return layout;
 }
 
+int OverlayActionCount(OverlayMode overlayMode) {
+    return overlayMode == OverlayMode::Help ? 1 : 2;
+}
+
+Rectangle OverlayActionRect(const LayoutMetrics& layout, OverlayMode overlayMode, int index) {
+    if (overlayMode == OverlayMode::Help) {
+        if (index != 0) {
+            return {};
+        }
+
+        const Rectangle base = layout.overlayActionRects[0];
+        return {
+            layout.boardRect.x + (layout.boardRect.width - base.width) * 0.5F,
+            base.y,
+            base.width,
+            base.height
+        };
+    }
+
+    if (index < 0 || index >= layout.overlayActionCount) {
+        return {};
+    }
+    return layout.overlayActionRects[static_cast<std::size_t>(index)];
+}
+
 }  // namespace game2048

@@ -355,11 +355,11 @@ void UI::DrawOverlay(const LayoutMetrics& layout, const HUDState& state) const {
         DrawText(subtitle, static_cast<int>(subtitleX), static_cast<int>(subtitleY), subtitleFs, Color{100, 88, 76, 255});
 
         if (state.overlayMode == OverlayMode::Victory) {
-            DrawControlButton(layout.overlayActionRects[0], "Continue", false, false);
-            DrawControlButton(layout.overlayActionRects[1], "Auto AI", state.controlMode == ControlMode::AIAutoplay, false);
+            DrawControlButton(OverlayActionRect(layout, state.overlayMode, 0), "Continue", false, false);
+            DrawControlButton(OverlayActionRect(layout, state.overlayMode, 1), "Auto AI", state.controlMode == ControlMode::AIAutoplay, false);
         } else if (state.overlayMode == OverlayMode::GameOver) {
-            DrawControlButton(layout.overlayActionRects[0], "Restart", false, false);
-            DrawControlButton(layout.overlayActionRects[1], "Exit", false, false);
+            DrawControlButton(OverlayActionRect(layout, state.overlayMode, 0), "Restart", false, false);
+            DrawControlButton(OverlayActionRect(layout, state.overlayMode, 1), "Exit", false, false);
         }
     }
 
@@ -454,8 +454,7 @@ void UI::DrawOverlay(const LayoutMetrics& layout, const HUDState& state) const {
     }
 
     EndScissorMode();
-    DrawControlButton(layout.overlayActionRects[0], "Close", false, false);
-    DrawControlButton(layout.overlayActionRects[1], "Close", false, false);
+    DrawControlButton(OverlayActionRect(layout, state.overlayMode, 0), "Close", false, false);
 }
 
 }  // namespace game2048

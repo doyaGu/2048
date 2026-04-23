@@ -37,8 +37,8 @@ ControlId OverlayPointerControl(const RawPointerState& pointer, const LayoutMetr
     if (!pointer.connected || !pointer.pressed) {
         return ControlId::None;
     }
-    for (int index = 0; index < layout.overlayActionCount; ++index) {
-        if (!Contains(layout.overlayActionRects[static_cast<std::size_t>(index)], pointer.position)) {
+    for (int index = 0; index < OverlayActionCount(overlayMode); ++index) {
+        if (!Contains(OverlayActionRect(layout, overlayMode, index), pointer.position)) {
             continue;
         }
         if (overlayMode == OverlayMode::GameOver) {

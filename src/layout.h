@@ -6,6 +6,7 @@
 
 #include "config.h"
 #include "input_types.h"
+#include "interaction_session.h"
 
 namespace game2048 {
 
@@ -30,5 +31,7 @@ struct LayoutMetrics {
 };
 
 LayoutMetrics ComputeLayout(int screenWidth, int screenHeight, bool showTouchHud = false);
+int OverlayActionCount(OverlayMode overlayMode);
+Rectangle OverlayActionRect(const LayoutMetrics& layout, OverlayMode overlayMode, int index);
 
 }  // namespace game2048

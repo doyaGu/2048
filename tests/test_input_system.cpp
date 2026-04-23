@@ -141,6 +141,16 @@ TEST_CASE(Layout_NarrowWindow_StaysWithinContentBounds) {
     EXPECT_TRUE(layout.clusterRect.y + layout.clusterRect.height <= contentBottom);
 }
 
+TEST_CASE(Layout_HelpOverlay_UsesSingleCenteredActionButton) {
+    const auto layout = ComputeLayout(1280, 720, false);
+    const Rectangle helpButton = OverlayActionRect(layout, OverlayMode::Help, 0);
+    const float boardCenter = layout.boardRect.x + layout.boardRect.width * 0.5F;
+    const float buttonCenter = helpButton.x + helpButton.width * 0.5F;
+
+    EXPECT_EQ(OverlayActionCount(OverlayMode::Help), 1);
+    EXPECT_NEAR(buttonCenter, boardCenter, 0.01);
+}
+
 TEST_CASE(InputSystem_HelpOverlay_GamepadButtons_DoNotLeak_ToGameplayCommands) {
     InputSystem system;
     RawInputState raw {};
@@ -154,6 +164,26 @@ TEST_CASE(InputSystem_HelpOverlay_GamepadButtons_DoNotLeak_ToGameplayCommands) {
 
     EXPECT_EQ(frame.command, game2048::InputCommand::Exit);
     EXPECT_EQ(frame.primaryControl, ControlId::OverlayPrimary);
+}
+
+TEST_CASE(InputSystem_HelpOverlay_OnlyCenteredButtonIsClickable) {
+    InputSystem system;
+    RawInputState raw {};
+    const auto layout = ComputeLayout(1280, 720);
+    const Rectangle helpButton = OverlayActionRect(layout, OverlayMode::Help, 0);
+
+    raw.pointers[0].connected = true;
+    raw.pointers[0].pressed = true;
+    raw.pointers[0].position = {helpButton.x + helpButton.width * 0.5F, helpButton.y + helpButton.height * 0.5F};
+
+    const auto centered = system.BuildFrame(raw, layout, false, false, OverlayMode::Help);
+    EXPECT_EQ(centered.command, game2048::InputCommand::Exit);
+
+    raw.pointers[0].position = {layout.overlayActionRects[1].x + layout.overlayActionRects[1].width * 0.5F,
+                                layout.overlayActionRects[1].y + layout.overlayActionRects[1].height * 0.5F};
+
+    const auto stray = system.BuildFrame(raw, layout, false, false, OverlayMode::Help);
+    EXPECT_EQ(stray.command, game2048::InputCommand::None);
 }
 
 TEST_CASE(InputSystem_VictoryOverlay_BackButton_TogglesAutoplay) {

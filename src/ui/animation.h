@@ -5,14 +5,9 @@
 #include <raylib.h>
 
 #include "core/board.h"
+#include "runtime/runtime_types.h"
 
 namespace game2048 {
-
-enum class AnimationSpeed {
-    Normal,
-    Slow,
-    Turbo
-};
 
 struct AnimationSnapshot {
     Board before {};

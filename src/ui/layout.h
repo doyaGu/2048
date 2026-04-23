@@ -7,7 +7,7 @@
 
 #include "core/config.h"
 #include "input/input_types.h"
-#include "app/session_types.h"
+#include "runtime/runtime_types.h"
 
 namespace game2048 {
 

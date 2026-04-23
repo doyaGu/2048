@@ -2,7 +2,7 @@
 
 #include "input/gamepad_input.h"
 #include "input/pointer_input.h"
-#include "app/session_types.h"
+#include "runtime/runtime_types.h"
 
 namespace game2048 {
 

@@ -11,27 +11,9 @@
 
 namespace game2048 {
 
-namespace {
-
-constexpr OverlayMode ToLayoutOverlayMode(HUDOverlayMode mode) {
-    switch (mode) {
-        case HUDOverlayMode::None:
-            return OverlayMode::None;
-        case HUDOverlayMode::Help:
-            return OverlayMode::Help;
-        case HUDOverlayMode::Victory:
-            return OverlayMode::Victory;
-        case HUDOverlayMode::GameOver:
-            return OverlayMode::GameOver;
-    }
-    return OverlayMode::None;
-}
-
-}  // namespace
-
-void DrawOverlayView(const LayoutMetrics& layout, const HUDState& state) {
-    if (state.session.overlayMode == HUDOverlayMode::GameOver || state.session.overlayMode == HUDOverlayMode::Victory) {
-        const bool isGameOver = state.session.overlayMode == HUDOverlayMode::GameOver;
+void DrawOverlayView(const LayoutMetrics& layout, const RuntimeSnapshot& state) {
+    if (state.overlayMode == OverlayMode::GameOver || state.overlayMode == OverlayMode::Victory) {
+        const bool isGameOver = state.overlayMode == OverlayMode::GameOver;
         const Color tint = isGameOver ? Fade(Color{220, 210, 198, 255}, 0.85F)
                                       : Fade(Color{56, 202, 168, 255}, 0.48F);
         DrawRectangleRounded(layout.boardRect, 0.05F, 10, tint);
@@ -60,17 +42,16 @@ void DrawOverlayView(const LayoutMetrics& layout, const HUDState& state) {
                              Fade(Color{100, 88, 76, 255}, 0.14F));
         DrawText(subtitle.c_str(), static_cast<int>(subtitleX), static_cast<int>(subtitleY), subtitleFs, Color{100, 88, 76, 255});
 
-        const OverlayMode overlayMode = ToLayoutOverlayMode(state.session.overlayMode);
-        if (state.session.overlayMode == HUDOverlayMode::Victory) {
-            DrawControlButton(OverlayActionRect(layout, overlayMode, 0), "Continue", false, false);
-            DrawControlButton(OverlayActionRect(layout, overlayMode, 1), "Auto AI", state.session.controlMode == HUDControlMode::AIAutoplay, false);
+        if (state.overlayMode == OverlayMode::Victory) {
+            DrawControlButton(OverlayActionRect(layout, state.overlayMode, 0), "Continue", false, false);
+            DrawControlButton(OverlayActionRect(layout, state.overlayMode, 1), "Auto AI", state.controlMode == ControlMode::AIAutoplay, false);
         } else {
-            DrawControlButton(OverlayActionRect(layout, overlayMode, 0), "Restart", false, false);
-            DrawControlButton(OverlayActionRect(layout, overlayMode, 1), "Exit", false, false);
+            DrawControlButton(OverlayActionRect(layout, state.overlayMode, 0), "Restart", false, false);
+            DrawControlButton(OverlayActionRect(layout, state.overlayMode, 1), "Exit", false, false);
         }
     }
 
-    if (state.session.overlayMode != HUDOverlayMode::Help) {
+    if (state.overlayMode != OverlayMode::Help) {
         return;
     }
 
@@ -100,7 +81,7 @@ void DrawOverlayView(const LayoutMetrics& layout, const HUDState& state) {
     DrawText("Help", static_cast<int>(modal.x + pad), static_cast<int>(y), headerFs, Color{119, 110, 101, 255});
     y += static_cast<float>(headerFs) + 14.0F;
 
-    DrawText("Deterministic 2048 with AI and benchmark mode.", static_cast<int>(modal.x + pad), static_cast<int>(y), bodyFs, Color{58, 59, 84, 255});
+    DrawText("Board-centered 2048 AI lab with background search.", static_cast<int>(modal.x + pad), static_cast<int>(y), bodyFs, Color{58, 59, 84, 255});
     y += lineH + 8.0F;
 
     DrawText("Move: Arrows or WASD", static_cast<int>(modal.x + pad), static_cast<int>(y), bodyFs, Color{58, 59, 84, 255});
@@ -114,17 +95,17 @@ void DrawOverlayView(const LayoutMetrics& layout, const HUDState& state) {
     DrawText("Esc / H / F1: close help", static_cast<int>(modal.x + pad), static_cast<int>(y), bodyFs, Color{58, 59, 84, 255});
     y += lineH + 10.0F;
 
-    DrawText("CLI benchmark:", static_cast<int>(modal.x + pad), static_cast<int>(y), smallFs, Color{143, 122, 102, 255});
+    DrawText("CLI:", static_cast<int>(modal.x + pad), static_cast<int>(y), smallFs, Color{143, 122, 102, 255});
     y += smallLineH;
-    DrawText("--benchmark N  --ai expectimax  --time-budget-ms 10", static_cast<int>(modal.x + pad), static_cast<int>(y), smallFs, Color{143, 122, 102, 255});
+    DrawText("bench --games N  |  analyze --seed N", static_cast<int>(modal.x + pad), static_cast<int>(y), smallFs, Color{143, 122, 102, 255});
     y += smallLineH + 8.0F;
 
-    if (state.session.showContinueHint) {
+    if (state.showContinueHint) {
         DrawText("You can keep playing after hitting 2048.", static_cast<int>(modal.x + pad), static_cast<int>(y), smallFs, Color{143, 122, 102, 255});
     }
 
     EndScissorMode();
-    DrawControlButton(OverlayActionRect(layout, ToLayoutOverlayMode(state.session.overlayMode), 0), "Close", false, false);
+    DrawControlButton(OverlayActionRect(layout, state.overlayMode, 0), "Close", false, false);
 }
 
 }  // namespace game2048

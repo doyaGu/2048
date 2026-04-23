@@ -13,7 +13,7 @@
 
 namespace game2048 {
 
-void DrawPanelsView(const LayoutMetrics& layout, const HUDState& state) {
+void DrawPanelsView(const LayoutMetrics& layout, const RuntimeSnapshot& state) {
     const int titleFs = std::clamp(static_cast<int>(layout.topBarTitleRect.height * 0.70F), 20, 42);
     DrawFittedText("2048 Engine",
                    layout.topBarTitleRect.x,
@@ -22,8 +22,8 @@ void DrawPanelsView(const LayoutMetrics& layout, const HUDState& state) {
                    titleFs,
                    Color{119, 110, 101, 255});
 
-    DrawMetricBox(layout.scoreBoxRects[0], "Score", std::to_string(state.game.score), Color{246, 124, 95, 255});
-    DrawMetricBox(layout.scoreBoxRects[1], "Best", std::to_string(state.game.bestScore), Color{237, 200, 80, 255});
+    DrawMetricBox(layout.scoreBoxRects[0], "Score", std::to_string(state.score), Color{246, 124, 95, 255});
+    DrawMetricBox(layout.scoreBoxRects[1], "Rev", std::to_string(state.boardRevision), Color{237, 200, 80, 255});
 
     DrawRectangleRounded(layout.panelRect, 0.05F, 10, Fade(Color{249, 246, 242, 255}, 0.92F));
     DrawRectangleLinesEx(layout.panelRect, 1.5F, Fade(Color{143, 122, 102, 255}, 0.18F));
@@ -41,14 +41,14 @@ void DrawPanelsView(const LayoutMetrics& layout, const HUDState& state) {
 
     DrawSectionHeader(layout.panelRect, y, "Status", style);
     const std::array<std::pair<const char*, std::string>, 8> statusLines {{
-        {"Mode", std::string(ControlModeName(state.session.controlMode))},
-        {"AI", std::string(AgentName(state.ai.agentKind))},
-        {"Gate", std::string(InputGateName(state.session.inputGate))},
-        {"Anim", std::string(AnimationSpeedName(state.session.animationSpeed))},
-        {"Max Tile", std::to_string(state.game.maxTile)},
-        {"Goal", state.game.achieved2048 ? "2048 reached" : "In progress"},
-        {"Seed", std::to_string(state.game.seed)},
-        {"Hint", state.ai.recommendation.valid ? std::string(DirectionName(state.ai.recommendation.direction)) : "-"},
+        {"Mode", std::string(ControlModeName(state.controlMode))},
+        {"AI", std::string(AgentName(state.agent))},
+        {"State", std::string(AIStatusName(state.aiStatus))},
+        {"Gate", std::string(InputGateName(state.inputGate))},
+        {"Anim", std::string(AnimationSpeedName(state.animationSpeed))},
+        {"Max Tile", std::to_string(state.maxTile)},
+        {"Seed", std::to_string(state.seed)},
+        {"Hint", state.recommendation.valid ? std::string(DirectionName(state.recommendation.direction)) : "-"},
     }};
     for (const auto& [label, value] : statusLines) {
         DrawInfoLine(x, y, innerWidth, label, value, style);
@@ -59,11 +59,11 @@ void DrawPanelsView(const LayoutMetrics& layout, const HUDState& state) {
     y += style.divGap;
     DrawSectionHeader(layout.panelRect, y, "Search", style);
     const std::array<std::pair<const char*, std::string>, 6> searchLines {{
-        {"Depth", std::to_string(state.ai.lastSearch.maxDepthReached)},
-        {"Nodes", std::to_string(state.ai.lastSearch.nodes)},
-        {"TT Hits", std::to_string(state.ai.lastSearch.cacheHits)},
-        {"Eval", TextFormat("%.1f", state.ai.lastSearch.evaluation)},
-        {"Think ms", TextFormat("%.2f", state.ai.lastSearch.elapsedMs)},
+        {"Depth", std::to_string(state.lastSearch.maxDepthReached)},
+        {"Nodes", std::to_string(state.lastSearch.nodes)},
+        {"TT Hits", std::to_string(state.lastSearch.cacheHits)},
+        {"Eval", TextFormat("%.1f", state.lastSearch.evaluation)},
+        {"Think ms", TextFormat("%.2f", state.lastSearch.elapsedMs)},
         {"FPS", std::to_string(GetFPS())},
     }};
     for (const auto& [label, value] : searchLines) {
@@ -74,18 +74,18 @@ void DrawPanelsView(const LayoutMetrics& layout, const HUDState& state) {
     DrawDivider(layout.panelRect, y);
     y += style.divGap;
     DrawSectionHeader(layout.panelRect, y, "Evaluator", style);
-    struct EvalRowDef { const char* label; double EvaluatorHUD::* field; };
+    struct EvalRowDef { const char* label; double ai::FeatureBreakdown::* field; };
     static constexpr std::array<EvalRowDef, 7> kEvalRows {{
-        {"Empty", &EvaluatorHUD::emptyTiles},
-        {"Mono", &EvaluatorHUD::monotonicity},
-        {"Smooth", &EvaluatorHUD::smoothness},
-        {"Corner", &EvaluatorHUD::cornerMax},
-        {"Merge", &EvaluatorHUD::mergePotential},
-        {"Snake", &EvaluatorHUD::snakePattern},
-        {"Trap", &EvaluatorHUD::trapPenalty},
+        {"Empty", &ai::FeatureBreakdown::emptyTiles},
+        {"Mono", &ai::FeatureBreakdown::monotonicity},
+        {"Smooth", &ai::FeatureBreakdown::smoothness},
+        {"Corner", &ai::FeatureBreakdown::cornerMax},
+        {"Merge", &ai::FeatureBreakdown::mergePotential},
+        {"Snake", &ai::FeatureBreakdown::snakePattern},
+        {"Trap", &ai::FeatureBreakdown::trapPenalty},
     }};
     for (const auto& row : kEvalRows) {
-        DrawEvalRow(x, y, innerWidth, row.label, state.ai.evaluatorBreakdown.*row.field, style);
+        DrawEvalRow(x, y, innerWidth, row.label, state.evaluatorBreakdown.*row.field, style);
     }
 
     y += style.divGap;
@@ -110,8 +110,8 @@ void DrawPanelsView(const LayoutMetrics& layout, const HUDState& state) {
 
     for (std::size_t index = 0; index < layout.controlCount; ++index) {
         const ControlId id = layout.controlIds[index];
-        const bool active = id == ControlId::ToggleAutoAI && state.session.controlMode == HUDControlMode::AIAutoplay;
-        const bool disabled = state.session.overlayMode != HUDOverlayMode::None;
+        const bool active = id == ControlId::ToggleAutoAI && state.controlMode == ControlMode::AIAutoplay;
+        const bool disabled = state.overlayMode != OverlayMode::None;
         const auto label = ControlLabel(id);
         DrawControlButton(layout.controlRects[index], label.data(), active, disabled);
     }

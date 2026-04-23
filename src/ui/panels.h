@@ -2,9 +2,9 @@
 
 namespace game2048 {
 
-struct HUDState;
 struct LayoutMetrics;
+struct RuntimeSnapshot;
 
-void DrawPanelsView(const LayoutMetrics& layout, const HUDState& state);
+void DrawPanelsView(const LayoutMetrics& layout, const RuntimeSnapshot& state);
 
 }  // namespace game2048

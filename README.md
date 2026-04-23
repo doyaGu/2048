@@ -1,11 +1,13 @@
-# 2048 Engine
+# 2048 AI Lab
 
-A maintainable C++17 + raylib + CMake implementation of 2048 built as two connected subsystems:
+A C++17 + raylib + CMake implementation of 2048 as a board-centered AI laboratory. The deterministic game core remains isolated, AI search runs through a search/benchmark stack, and interactive play is coordinated by a pure C++ event/snapshot runtime.
 
 - A deterministic game core with reference and fast board representations
 - A search-oriented AI / benchmark stack centered on expectimax
+- A runtime layer that consumes events and emits immutable snapshots
+- A raylib frontend that renders the Board-Centered AI Lab
 
-The project is designed for correctness first, then observability and speed. Rendering is a thin layer over a pure logic core. Benchmark mode runs headless and never depends on the render loop.
+Benchmark and analyze modes run headless and never depend on the render loop.
 
 ## Features
 
@@ -16,11 +18,12 @@ The project is designed for correctness first, then observability and speed. Ren
 - Human play, greedy AI, expectimax AI
 - Iterative deepening, time-budget search, move ordering, transposition table
 - Benchmark mode with summary stats and optional CSV export
-- raylib UI with adaptive layout, overlays, slide / merge / spawn animation
+- raylib UI with adaptive Board-Centered Lab layout
 - Unified multi-input layer for keyboard, mouse, touch, and gamepad
 - Undo, same-seed restart, modal help, autoplay, single-step AI
-- Explicit interaction state machine for overlays, buffered input, and AI handoff
-- Lightweight unit test suite covering move correctness, equivalence, evaluator behavior, and seed reproducibility
+- Runtime event/snapshot model for overlays, control mode, and AI handoff
+- Background AI worker with board-revision stale result rejection
+- Lightweight unit test suite covering move correctness, equivalence, evaluator behavior, runtime events, CLI parsing, and seed reproducibility
 
 ## Project Layout
 
@@ -41,14 +44,12 @@ game2048/
       greedy.h / greedy.cpp
       transposition_table.h / transposition_table.cpp
     app/
-      ai_advisor.h / ai_advisor.cpp
       app.h / app.cpp
       cli_options.h / cli_options.cpp
-      game_controller.h / game_controller.cpp
-      hud_mapper.h / hud_mapper.cpp
-      interaction_session.h / interaction_session.cpp
-      session_types.h
-      view_state.h
+    runtime/
+      ai_worker.h / ai_worker.cpp
+      runtime_engine.h / runtime_engine.cpp
+      runtime_types.h
     core/
       board.h / board.cpp
       board_fast.h / board_fast.cpp
@@ -74,15 +75,13 @@ game2048/
       ui.h / ui.cpp
       widgets.h / widgets.cpp
   tests/
-    test_ai_advisor.cpp
     test_framework.h
-    test_game_controller.cpp
     test_main.cpp
+    test_runtime_engine.cpp
     test_moves.cpp
     test_board_equivalence.cpp
     test_eval.cpp
     test_game.cpp
-    test_interaction.cpp
     test_pointer_input.cpp
     test_gamepad_input.cpp
     test_input_system.cpp
@@ -117,16 +116,23 @@ Interactive mode:
 
 ```bash
 ./build/game2048
-./build/game2048 --seed 123
-./build/game2048 --ai greedy
+./build/game2048 play --seed 123
+./build/game2048 play --ai greedy --depth 2 --time-budget-ms 5
 ```
 
 Benchmark mode:
 
 ```bash
-./build/game2048 --benchmark 100
-./build/game2048 --benchmark 200 --seed 123 --ai expectimax --time-budget-ms 10
-./build/game2048 --benchmark 200 --ai greedy --csv out.csv
+./build/game2048 bench --games 100
+./build/game2048 bench --games 200 --seed 123 --ai expectimax --time-budget-ms 10
+./build/game2048 bench --games 200 --ai greedy --csv out.csv
+```
+
+Analyze mode:
+
+```bash
+./build/game2048 analyze --seed 123 --ai expectimax
+./build/game2048 analyze --board "2,0,0,0/0,4,0,0/0,0,8,0/0,0,0,16" --ai greedy
 ```
 
 ## Controls
@@ -159,25 +165,27 @@ The codebase is organized around explicit layers instead of one flat `src/` buck
 
 - `src/core`: deterministic rules, board state, RNG, and gameplay model
 - `src/ai`: search, evaluation, benchmark, and AI engine selection
+- `src/runtime`: pure C++ event processing, snapshots, control policy, and background AI worker
 - `src/input`: raw device polling plus normalized input routing
 - `src/ui`: layout, renderer, panels, overlays, animation, and UI metadata
-- `src/app`: runtime orchestration, session policy, controller/advisor wrappers, and HUD mapping
+- `src/app`: CLI parsing and thin raylib application shell
 
 Dependency direction is intentionally narrow:
 
 - `core` depends on no higher layer
 - `ai` depends on `core`
+- `runtime` depends on `core` and `ai`
 - `shared` contains cross-cutting value types and utilities that may be reused by multiple layers without becoming a new behavior-owning subsystem
-- `input` depends on lightweight app state enums and UI layout geometry, but not on the full app loop
-- `ui` depends on UI-facing view state, not on `Game`, `AIEngine`, or `InteractionSession` internals
-- `app` is the composition root that wires everything together
+- `input` depends on runtime overlay enums and UI layout geometry, but not on the full app loop
+- `ui` depends on immutable runtime snapshots, not on `Game`, `AIEngine`, or `RuntimeEngine` internals
+- `app` wires raylib input/rendering to runtime events and snapshots
 
 ### 2. Include policy
 
 All project targets now include only `src/` as the project include root. Internal headers are referenced with explicit root-relative paths such as:
 
 - `core/board.h`
-- `app/game_controller.h`
+- `runtime/runtime_engine.h`
 - `input/input_system.h`
 - `ui/layout.h`
 
@@ -186,11 +194,11 @@ This avoids relying on CMake to expose each subdirectory as a fallback include r
 ### 3. Logic / Render split
 
 - `board.*`, `board_fast.*`, `game.*`, `rng.*`, `stats.*`, and the AI stack are raylib-free.
-- `renderer.*`, `ui.*`, `layout.*`, `input.*`, and `animation.*` are the only raylib-facing pieces.
+- `renderer.*`, `ui.*`, `layout.*`, `input.*`, `animation.*`, and `app.cpp` are the raylib-facing pieces.
 - `input_source.*` polls raw raylib state, while `pointer_input.*`, `gamepad_input.*`, and `input_system.*` normalize devices into a single per-frame `InputFrame`.
-- `game_controller.*` owns gameplay state plus best-score persistence, `ai_advisor.*` owns AI selection plus cached recommendations, and `interaction_session.*` owns overlay and input policy.
-- `hud_mapper.*` converts app/runtime state into the immutable `HUDState` consumed by UI rendering.
-- The UI consumes immutable game state snapshots plus move traces. It does not decide rules.
+- `RuntimeEngine` owns gameplay state, overlay/control policy, board revisions, and snapshot production.
+- `AIWorker` owns background recommendation search and returns revision-tagged results.
+- The UI consumes immutable `RuntimeSnapshot` values. It does not decide rules or call AI services.
 
 ### 4. Dual board model
 
@@ -219,14 +227,15 @@ This avoids relying on CMake to expose each subdirectory as a fallback include r
 
 Spawning stays outside raw board movement. A tile is only spawned after a valid move.
 
-`InteractionSession` owns:
+`RuntimeEngine` owns:
 
 - control mode (`Human`, `AIAutoplay`, `AISingleStep`)
 - overlay mode (`None`, `Help`, `Victory`, `GameOver`)
 - input gate (`Accepting`, `BlockedByOverlay`, `BlockedByAnimation`)
-- one-slot buffered move state and held-key repeat timing
+- board revision and latest AI recommendation revision
+- stale AI result rejection
 
-This keeps overlay behavior, input buffering, and AI pause/resume rules out of `Game`.
+This keeps overlay behavior and AI pause/resume rules out of `Game`.
 
 ### 6. Unified input flow
 
@@ -236,7 +245,8 @@ The input stack is layered so new devices can be added without touching rule cod
 - `PointerInputRouter` resolves swipe gestures and control hit-tests.
 - `GamepadInputRouter` handles button mapping and analog-stick debounce.
 - `InputSystem` collapses all active devices into a single `InputFrame` per render tick.
-- `InteractionSession` consumes that normalized frame and applies overlay, buffering, and autoplay policy.
+- `app.cpp` maps the normalized frame into `RuntimeEvent` values.
+- `RuntimeEngine` consumes events and applies overlay, control-mode, and autoplay policy.
 
 This keeps device-specific ambiguity out of the gameplay state machine and makes the routing logic unit-testable without raylib globals.
 
@@ -356,8 +366,9 @@ Input-specific coverage includes:
 - single-frame intent collapsing
 - overlay-specific gamepad command semantics
 - adaptive touch HUD layout exposure
-- isolated `GameController` persistence behavior via injected best-score paths
-- isolated `AIAdvisor` cache reset and agent/config transition behavior
+- runtime event dispatch and snapshot updates
+- stale AI recommendation rejection by board revision
+- CLI subcommand parsing
 
 Covered areas:
 
@@ -365,7 +376,7 @@ Covered areas:
 - invalid move no-op behavior
 - score accumulation
 - game-over detection
-- interaction state transitions and buffered-input rules
+- runtime control/overlay state transitions
 - reference vs fast board equivalence
 - evaluator ordering sanity
 - deterministic seed reproducibility

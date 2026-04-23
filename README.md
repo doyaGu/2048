@@ -17,6 +17,7 @@ The project is designed for correctness first, then observability and speed. Ren
 - Iterative deepening, time-budget search, move ordering, transposition table
 - Benchmark mode with summary stats and optional CSV export
 - raylib UI with adaptive layout, overlays, slide / merge / spawn animation
+- Unified multi-input layer for keyboard, mouse, touch, and gamepad
 - Undo, same-seed restart, modal help, autoplay, single-step AI
 - Explicit interaction state machine for overlays, buffered input, and AI handoff
 - Lightweight unit test suite covering move correctness, equivalence, evaluator behavior, and seed reproducibility
@@ -36,6 +37,12 @@ game2048/
     board_fast.h / board_fast.cpp
     rng.h / rng.cpp
     input.h / input.cpp
+    input_types.h
+    input_bindings.h / input_bindings.cpp
+    input_source.h / input_source.cpp
+    pointer_input.h / pointer_input.cpp
+    gamepad_input.h / gamepad_input.cpp
+    input_system.h / input_system.cpp
     interaction_session.h / interaction_session.cpp
     renderer.h / renderer.cpp
     animation.h / animation.cpp
@@ -58,16 +65,32 @@ game2048/
     test_eval.cpp
     test_game.cpp
     test_interaction.cpp
+    test_pointer_input.cpp
+    test_gamepad_input.cpp
+    test_input_system.cpp
 ```
 
 ## Build
 
-This repository expects a local raylib source checkout at `../raylib`. The supplied `CMakeLists.txt` builds raylib as a subdirectory and then links the game against it.
+The build uses `find_package(raylib)`.
 
 ```bash
 cmake -S . -B build
 cmake --build build --target game2048
 cmake --build build --target game2048_tests
+```
+
+If CMake cannot find raylib automatically, set one of these:
+
+- `raylib_ROOT` to a raylib install or source tree root that already has a built raylib library
+- `raylib_DIR` to a raylib CMake config directory when you want to point directly at package metadata
+- `CMAKE_PREFIX_PATH` to a prefix containing raylib
+
+Example:
+
+```bash
+cmake -S . -B build -Draylib_ROOT=/path/to/raylib
+cmake --build build --target game2048
 ```
 
 ## Run
@@ -91,6 +114,9 @@ Benchmark mode:
 ## Controls
 
 - `Arrow Keys` / `WASD`: move
+- `Mouse`: click on-screen controls
+- `Touch`: swipe on the board or tap touch HUD controls
+- `Gamepad`: D-pad / left stick move, `A` single-step AI / confirm, `B` dismiss / exit, `X` undo, `Y` restart
 - `R`: restart with the current seed
 - `U`: undo
 - `Space`: toggle autoplay
@@ -105,6 +131,7 @@ Interaction notes:
 - Reaching `2048` shows a one-shot victory overlay; the game continues after dismissal.
 - Move keys dismiss the victory overlay and immediately execute that move.
 - `Help` is modal and does not buffer hidden moves behind the panel.
+- On touch-capable interaction, the layout switches to an expanded touch HUD and keeps it active for the rest of the session.
 
 ## Architecture
 
@@ -112,6 +139,7 @@ Interaction notes:
 
 - `board.*`, `board_fast.*`, `game.*`, `rng.*`, `stats.*`, and the AI stack are raylib-free.
 - `renderer.*`, `ui.*`, `layout.*`, `input.*`, and `animation.*` are the only raylib-facing pieces.
+- `input_source.*` polls raw raylib state, while `pointer_input.*`, `gamepad_input.*`, and `input_system.*` normalize devices into a single per-frame `InputFrame`.
 - `interaction_session.*` is the bridge between the deterministic core and the raylib loop.
 - The UI consumes immutable game state snapshots plus move traces. It does not decide rules.
 
@@ -150,6 +178,18 @@ Spawning stays outside raw board movement. A tile is only spawned after a valid 
 - one-slot buffered move state and held-key repeat timing
 
 This keeps overlay behavior, input buffering, and AI pause/resume rules out of `Game`.
+
+### 4. Unified input flow
+
+The input stack is layered so new devices can be added without touching rule code:
+
+- `InputSource` gathers raw keyboard, pointer, touch, and gamepad state from raylib.
+- `PointerInputRouter` resolves swipe gestures and control hit-tests.
+- `GamepadInputRouter` handles button mapping and analog-stick debounce.
+- `InputSystem` collapses all active devices into a single `InputFrame` per render tick.
+- `InteractionSession` consumes that normalized frame and applies overlay, buffering, and autoplay policy.
+
+This keeps device-specific ambiguity out of the gameplay state machine and makes the routing logic unit-testable without raylib globals.
 
 ## Board Implementation
 
@@ -259,6 +299,14 @@ cmake --build build --target game2048_tests
 ./build/game2048_tests
 ctest --test-dir build --output-on-failure
 ```
+
+Input-specific coverage includes:
+
+- swipe threshold and dominant-axis resolution
+- gamepad stick recenter / debounce behavior
+- single-frame intent collapsing
+- overlay-specific gamepad command semantics
+- adaptive touch HUD layout exposure
 
 Covered areas:
 

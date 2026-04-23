@@ -177,10 +177,12 @@ int App::Run(int argc, char** argv) {
         if (actions.resetRequested) {
             game.Reset(game.Seed());
             session.OnReset(game.Seed());
+            animation.Reset();
             invalidateRecommendation();
         }
 
         if (actions.undoRequested && game.Undo()) {
+            animation.Reset();
             invalidateRecommendation();
         }
 

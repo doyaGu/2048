@@ -138,12 +138,14 @@ if (GAME2048_BUILD_TESTS)
     enable_testing()
 
     add_executable(game2048_tests
+        src/animation.cpp
         src/cli_options.cpp
         tests/test_cli_options.cpp
         src/gamepad_input.cpp
         src/input_system.cpp
         src/layout.cpp
         src/pointer_input.cpp
+        tests/test_animation.cpp
         tests/test_main.cpp
         tests/test_moves.cpp
         tests/test_board_equivalence.cpp

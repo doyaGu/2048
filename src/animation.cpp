@@ -52,6 +52,15 @@ void AnimationController::Start(const Board& before, const Board& after, const M
     active_ = duration_ > 0.0F && (!snapshot_.trace.moves.empty() || snapshot_.spawn.has_value());
 }
 
+void AnimationController::Reset() {
+    snapshot_ = {};
+    elapsed_ = 0.0F;
+    duration_ = 0.0F;
+    active_ = false;
+    shakeElapsed_ = shakeDuration_;
+    shakeAmplitude_ = 0.0F;
+}
+
 void AnimationController::Update(float dt) {
     if (!active_) {
         // still advance shake even when tile animation is done

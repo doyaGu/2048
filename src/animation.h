@@ -26,6 +26,7 @@ public:
     void SetSpeed(AnimationSpeed speed);
     AnimationSpeed Speed() const;
     void Start(const Board& before, const Board& after, const MoveTrace& trace, std::optional<SpawnEvent> spawn);
+    void Reset();
     void Update(float dt);
     bool Active() const;
     float SlideProgress() const;

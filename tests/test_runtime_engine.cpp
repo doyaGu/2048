@@ -14,6 +14,7 @@ using game2048::RuntimeEvent;
 using game2048::RuntimeEventType;
 using game2048::AIStatus;
 using game2048::ControlMode;
+using game2048::InputGate;
 using game2048::OverlayMode;
 
 RuntimeConfig FastConfig(std::uint64_t seed = 123) {
@@ -72,15 +73,21 @@ TEST_CASE(RuntimeEngine_ResetAndUndo_AreRuntimeEvents) {
     const auto before = runtime.Tick({}, 0.0);
     runtime.Tick({move}, 0.1);
     const auto moved = runtime.Tick({}, 0.2);
+    EXPECT_TRUE(moved.lastMove.has_value());
 
     runtime.Tick({RuntimeEvent {RuntimeEventType::Undo, Direction::Left}}, 0.3);
     const auto undone = runtime.Tick({}, 0.4);
     EXPECT_EQ(undone.boardRevision, moved.boardRevision + 1U);
+    EXPECT_FALSE(undone.lastMove.has_value());
 
+    runtime.Tick({move}, 0.45);
+    const auto movedAgain = runtime.Tick({}, 0.46);
+    EXPECT_TRUE(movedAgain.lastMove.has_value());
     runtime.Tick({RuntimeEvent {RuntimeEventType::Reset, Direction::Left}}, 0.5);
     const auto reset = runtime.Tick({}, 0.6);
     EXPECT_EQ(reset.score, 0U);
     EXPECT_TRUE(reset.boardRevision > before.boardRevision);
+    EXPECT_FALSE(reset.lastMove.has_value());
 }
 
 TEST_CASE(RuntimeEngine_OverlayAndAutoplay_AreInSnapshot) {
@@ -95,6 +102,16 @@ TEST_CASE(RuntimeEngine_OverlayAndAutoplay_AreInSnapshot) {
     snapshot = runtime.Tick({}, 0.4);
     EXPECT_EQ(snapshot.overlayMode, OverlayMode::None);
     EXPECT_EQ(snapshot.controlMode, ControlMode::AIAutoplay);
+}
+
+TEST_CASE(RuntimeEngine_InputGate_TracksAnimationBlocking) {
+    RuntimeEngine runtime(FastConfig(15));
+
+    auto snapshot = runtime.Tick({}, 0.0, true);
+    EXPECT_EQ(snapshot.inputGate, InputGate::BlockedByAnimation);
+
+    snapshot = runtime.Tick({RuntimeEvent {RuntimeEventType::OpenHelp, Direction::Left}}, 0.1, true);
+    EXPECT_EQ(snapshot.inputGate, InputGate::BlockedByOverlay);
 }
 
 TEST_CASE(RuntimeEngine_ToggleAutoplay_DismissesVictoryOverlay) {
@@ -114,6 +131,41 @@ TEST_CASE(RuntimeEngine_ToggleAutoplay_DismissesVictoryOverlay) {
 
     EXPECT_EQ(snapshot.overlayMode, OverlayMode::None);
     EXPECT_EQ(snapshot.controlMode, ControlMode::AIAutoplay);
+}
+
+TEST_CASE(RuntimeEngine_HelpOverlay_BlocksGameplayStateChanges) {
+    RuntimeEngine runtime(FastConfig(13));
+    const auto before = runtime.Tick({}, 0.0);
+
+    auto snapshot = runtime.Tick({RuntimeEvent {RuntimeEventType::OpenHelp, Direction::Left}}, 0.1);
+    EXPECT_EQ(snapshot.overlayMode, OverlayMode::Help);
+
+    snapshot = runtime.Tick({RuntimeEvent {RuntimeEventType::Reset, Direction::Left}}, 0.2);
+    EXPECT_EQ(snapshot.overlayMode, OverlayMode::Help);
+    EXPECT_EQ(snapshot.boardRevision, before.boardRevision);
+
+    snapshot = runtime.Tick({RuntimeEvent {RuntimeEventType::Move, Direction::Left}}, 0.3);
+    EXPECT_EQ(snapshot.overlayMode, OverlayMode::Help);
+    EXPECT_EQ(snapshot.boardRevision, before.boardRevision);
+}
+
+TEST_CASE(RuntimeEngine_StepAI_DismissesVictoryOverlay) {
+    RuntimeConfig config = FastConfig(17);
+    config.initialBoard = game2048::Board::FromRows({{
+        {{2048, 0, 0, 0}},
+        {{0, 0, 0, 0}},
+        {{0, 0, 0, 0}},
+        {{0, 0, 0, 0}},
+    }});
+    RuntimeEngine runtime(config);
+
+    auto snapshot = runtime.Tick({}, 0.1);
+    EXPECT_EQ(snapshot.overlayMode, OverlayMode::Victory);
+
+    snapshot = runtime.Tick({RuntimeEvent {RuntimeEventType::StepAI, Direction::Left}}, 0.2);
+
+    EXPECT_EQ(snapshot.overlayMode, OverlayMode::None);
+    EXPECT_TRUE(snapshot.controlMode == ControlMode::AISingleStep || snapshot.controlMode == ControlMode::Human);
 }
 
 TEST_CASE(RuntimeEngine_AIWorker_PublishesReadyRecommendation) {
@@ -174,4 +226,44 @@ TEST_CASE(RuntimeEngine_AIStatus_RecoversAfterFailedSearch) {
 
     EXPECT_EQ(snapshot.aiStatus, AIStatus::Ready);
     EXPECT_TRUE(snapshot.recommendation.valid);
+}
+
+TEST_CASE(AIWorker_BusyAndPoll_PreserveCompletedResultsUntilConsumed) {
+    game2048::AIWorker worker;
+
+    game2048::ai::SearchConfig search;
+    search.maxDepth = -1;
+    const auto generation = worker.Configure(game2048::ai::AgentKind::Expectimax, search);
+
+    const game2048::Board board;
+    worker.Submit(board, 1);
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+    EXPECT_TRUE(worker.Busy());
+
+    worker.Submit(board, 2);
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+    auto first = worker.Poll();
+    EXPECT_TRUE(first.has_value());
+    if (first.has_value()) {
+        EXPECT_EQ(first->revision, 1U);
+        EXPECT_EQ(first->generation, generation);
+        EXPECT_TRUE(first->failed);
+    }
+
+    auto second = worker.Poll();
+    for (int attempt = 0; attempt < 50 && !second.has_value(); ++attempt) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        second = worker.Poll();
+    }
+
+    EXPECT_TRUE(second.has_value());
+    if (second.has_value()) {
+        EXPECT_EQ(second->revision, 2U);
+        EXPECT_EQ(second->generation, generation);
+        EXPECT_TRUE(second->failed);
+    }
+
+    EXPECT_FALSE(worker.Busy());
 }

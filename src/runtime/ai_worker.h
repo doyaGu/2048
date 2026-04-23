@@ -15,6 +15,7 @@ namespace game2048 {
 
 struct AIWorkerResult {
     std::uint64_t revision = 0;
+    std::uint64_t generation = 0;
     ai::MoveDecision decision {};
     bool failed = false;
     std::string error;
@@ -28,7 +29,7 @@ public:
     AIWorker(const AIWorker&) = delete;
     AIWorker& operator=(const AIWorker&) = delete;
 
-    void Configure(ai::AgentKind agent, const ai::SearchConfig& search);
+    std::uint64_t Configure(ai::AgentKind agent, const ai::SearchConfig& search);
     void Submit(const Board& board, std::uint64_t revision);
     std::optional<AIWorkerResult> Poll();
     bool Busy() const;
@@ -37,6 +38,7 @@ private:
     struct Request {
         FastBoard board {};
         std::uint64_t revision = 0;
+        std::uint64_t generation = 0;
         ai::AgentKind agent = ai::AgentKind::Expectimax;
         ai::SearchConfig search {};
     };
@@ -47,6 +49,7 @@ private:
     std::condition_variable cv_;
     bool stop_ = false;
     bool running_ = false;
+    std::uint64_t generation_ = 0;
     ai::AgentKind agent_ = ai::AgentKind::Expectimax;
     ai::SearchConfig search_ {};
     std::optional<Request> pending_ {};

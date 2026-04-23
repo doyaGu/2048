@@ -12,7 +12,7 @@ class RuntimeEngine {
 public:
     explicit RuntimeEngine(RuntimeConfig config = {});
 
-    RuntimeSnapshot Tick(const std::vector<RuntimeEvent>& events, double nowSeconds);
+    RuntimeSnapshot Tick(const std::vector<RuntimeEvent>& events, double nowSeconds, bool animationBlocksInput = false);
     const RuntimeSnapshot& Snapshot() const;
 
 private:
@@ -35,9 +35,11 @@ private:
     std::optional<RuntimeMoveAnimation> lastMove_ {};
     std::uint64_t boardRevision_ = 0;
     std::uint64_t submittedRevision_ = static_cast<std::uint64_t>(-1);
+    std::uint64_t workerGeneration_ = 0;
     bool quitRequested_ = false;
     bool victoryOverlayShown_ = false;
     double lastTickSeconds_ = 0.0;
+    bool animationBlocksInput_ = false;
 };
 
 }  // namespace game2048

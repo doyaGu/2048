@@ -20,30 +20,45 @@ AIWorker::~AIWorker() {
     }
 }
 
-void AIWorker::Configure(ai::AgentKind agent, const ai::SearchConfig& search) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    agent_ = agent;
-    search_ = search;
+std::uint64_t AIWorker::Configure(ai::AgentKind agent, const ai::SearchConfig& search) {
+    std::uint64_t generation = 0;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        agent_ = agent;
+        search_ = search;
+        ++generation_;
+        generation = generation_;
+        pending_.reset();
+        completed_.reset();
+    }
+    cv_.notify_one();
+    return generation;
 }
 
 void AIWorker::Submit(const Board& board, std::uint64_t revision) {
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        pending_ = Request {FastBoard::FromReference(board), revision, agent_, search_};
+        pending_ = Request {FastBoard::FromReference(board), revision, generation_, agent_, search_};
     }
     cv_.notify_one();
 }
 
 std::optional<AIWorkerResult> AIWorker::Poll() {
-    std::lock_guard<std::mutex> lock(mutex_);
-    auto result = std::move(completed_);
-    completed_.reset();
+    std::optional<AIWorkerResult> result;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        result = std::move(completed_);
+        completed_.reset();
+    }
+    if (result.has_value()) {
+        cv_.notify_one();
+    }
     return result;
 }
 
 bool AIWorker::Busy() const {
     std::lock_guard<std::mutex> lock(mutex_);
-    return running_ || pending_.has_value();
+    return running_ || pending_.has_value() || completed_.has_value();
 }
 
 void AIWorker::Run() {
@@ -62,6 +77,7 @@ void AIWorker::Run() {
 
         AIWorkerResult result;
         result.revision = request.revision;
+        result.generation = request.generation;
         try {
             if (request.agent == ai::AgentKind::Expectimax && request.search.maxDepth < 0) {
                 throw std::runtime_error("expectimax max depth must be non-negative");
@@ -79,7 +95,11 @@ void AIWorker::Run() {
         }
 
         {
-            std::lock_guard<std::mutex> lock(mutex_);
+            std::unique_lock<std::mutex> lock(mutex_);
+            cv_.wait(lock, [&] { return stop_ || !completed_.has_value(); });
+            if (stop_) {
+                return;
+            }
             completed_ = std::move(result);
             running_ = false;
         }

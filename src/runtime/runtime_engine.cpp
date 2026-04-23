@@ -42,15 +42,16 @@ RuntimeEngine::RuntimeEngine(RuntimeConfig config)
         snapshot.seed = config_.seed;
         game_.Restore(snapshot);
     }
-    worker_.Configure(config_.agent, config_.search);
+    workerGeneration_ = worker_.Configure(config_.agent, config_.search);
     RefreshSnapshot();
     SyncOverlayState();
     RefreshSnapshot();
     SubmitRecommendationIfNeeded();
 }
 
-RuntimeSnapshot RuntimeEngine::Tick(const std::vector<RuntimeEvent>& events, double nowSeconds) {
+RuntimeSnapshot RuntimeEngine::Tick(const std::vector<RuntimeEvent>& events, double nowSeconds, bool animationBlocksInput) {
     lastTickSeconds_ = nowSeconds;
+    animationBlocksInput_ = animationBlocksInput;
     ConsumeAIResult();
     SyncOverlayState();
     for (const auto& event : events) {
@@ -59,6 +60,7 @@ RuntimeSnapshot RuntimeEngine::Tick(const std::vector<RuntimeEvent>& events, dou
 
     if ((snapshot_.controlMode == ControlMode::AIAutoplay || snapshot_.controlMode == ControlMode::AISingleStep) &&
         snapshot_.overlayMode == OverlayMode::None &&
+        !animationBlocksInput_ &&
         !game_.IsGameOver() &&
         snapshot_.recommendation.valid &&
         snapshot_.recommendationRevision == boardRevision_ &&
@@ -81,11 +83,15 @@ const RuntimeSnapshot& RuntimeEngine::Snapshot() const {
 void RuntimeEngine::ApplyEvent(const RuntimeEvent& event) {
     switch (event.type) {
         case RuntimeEventType::Reset:
+            if (snapshot_.overlayMode == OverlayMode::Help) {
+                return;
+            }
             Reset(game_.Seed());
             return;
         case RuntimeEventType::Undo:
             if (!OverlayBlocksCommands() && game_.Undo()) {
                 ++boardRevision_;
+                lastMove_.reset();
                 snapshot_.recommendation = {};
                 snapshot_.recommendationRevision = 0;
             }
@@ -95,7 +101,7 @@ void RuntimeEngine::ApplyEvent(const RuntimeEvent& event) {
                 snapshot_.overlayMode = OverlayMode::None;
                 snapshot_.controlMode = ControlMode::Human;
             }
-            if (!OverlayBlocksCommands()) {
+            if (!OverlayBlocksCommands() && !animationBlocksInput_) {
                 ExecuteMove(event.direction);
             }
             return;
@@ -111,8 +117,13 @@ void RuntimeEngine::ApplyEvent(const RuntimeEvent& event) {
             return;
         case RuntimeEventType::StepAI:
             if (!OverlayBlocksCommands()) {
+                if (snapshot_.overlayMode == OverlayMode::Victory) {
+                    snapshot_.overlayMode = OverlayMode::None;
+                }
                 snapshot_.controlMode = ControlMode::AISingleStep;
-                if (snapshot_.recommendation.valid && snapshot_.recommendationRevision == boardRevision_) {
+                if (!animationBlocksInput_ &&
+                    snapshot_.recommendation.valid &&
+                    snapshot_.recommendationRevision == boardRevision_) {
                     ExecuteMove(snapshot_.recommendation.direction);
                     snapshot_.controlMode = ControlMode::Human;
                 }
@@ -189,7 +200,7 @@ void RuntimeEngine::SubmitRecommendationIfNeeded() {
     if (snapshot_.recommendation.valid && snapshot_.recommendationRevision == boardRevision_) {
         return;
     }
-    if (submittedRevision_ == boardRevision_ && worker_.Busy()) {
+    if (submittedRevision_ == boardRevision_) {
         return;
     }
     submittedRevision_ = boardRevision_;
@@ -201,12 +212,17 @@ void RuntimeEngine::ConsumeAIResult() {
     if (!result.has_value()) {
         return;
     }
+    if (result->generation != workerGeneration_) {
+        return;
+    }
     if (result->revision != boardRevision_) {
         return;
     }
     if (result->failed) {
         snapshot_.aiStatus = AIStatus::Failed;
         snapshot_.recommendation = {};
+        snapshot_.recommendationRevision = 0;
+        snapshot_.lastSearch = {};
         return;
     }
     snapshot_.recommendation = result->decision;
@@ -240,9 +256,13 @@ void RuntimeEngine::RefreshSnapshot() {
 }
 
 void RuntimeEngine::RecomputeGate() {
-    snapshot_.inputGate = snapshot_.overlayMode == OverlayMode::None
-        ? InputGate::Accepting
-        : InputGate::BlockedByOverlay;
+    if (snapshot_.overlayMode != OverlayMode::None) {
+        snapshot_.inputGate = InputGate::BlockedByOverlay;
+        return;
+    }
+    snapshot_.inputGate = animationBlocksInput_
+        ? InputGate::BlockedByAnimation
+        : InputGate::Accepting;
 }
 
 void RuntimeEngine::SyncOverlayState() {
@@ -263,7 +283,7 @@ void RuntimeEngine::SyncOverlayState() {
 
 void RuntimeEngine::CycleAgent() {
     config_.agent = NextValue(kAgentCycle, config_.agent);
-    worker_.Configure(config_.agent, config_.search);
+    workerGeneration_ = worker_.Configure(config_.agent, config_.search);
     submittedRevision_ = static_cast<std::uint64_t>(-1);
     snapshot_.recommendation = {};
     snapshot_.recommendationRevision = 0;

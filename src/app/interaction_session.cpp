@@ -1,4 +1,4 @@
-#include "interaction_session.h"
+#include "app/interaction_session.h"
 
 namespace game2048 {
 

@@ -1,4 +1,4 @@
-#include "../src/interaction_session.h"
+#include "../src/app/interaction_session.h"
 #include "test_framework.h"
 
 namespace {

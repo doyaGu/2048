@@ -3,29 +3,11 @@
 #include <cstdint>
 #include <optional>
 
-#include "board.h"
-#include "input.h"
+#include "core/board.h"
+#include "input/input.h"
+#include "app/session_types.h"
 
 namespace game2048 {
-
-enum class ControlMode {
-    Human,
-    AIAutoplay,
-    AISingleStep
-};
-
-enum class OverlayMode {
-    None,
-    Help,
-    Victory,
-    GameOver
-};
-
-enum class InputGate {
-    Accepting,
-    BlockedByOverlay,
-    BlockedByAnimation
-};
 
 struct InteractionInput {
     InputCommand command = InputCommand::None;

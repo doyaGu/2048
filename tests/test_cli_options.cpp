@@ -1,6 +1,6 @@
 #include <stdexcept>
 
-#include "../src/cli_options.h"
+#include "../src/app/cli_options.h"
 #include "test_framework.h"
 
 namespace {

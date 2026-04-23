@@ -18,6 +18,7 @@ add_library(game2048_core
     src/board.cpp
     src/board_fast.cpp
     src/game.cpp
+    src/interaction_session.cpp
     src/rng.cpp
     src/stats.cpp
 )
@@ -92,6 +93,7 @@ if (GAME2048_BUILD_TESTS)
         tests/test_board_equivalence.cpp
         tests/test_eval.cpp
         tests/test_game.cpp
+        tests/test_interaction.cpp
     )
 
     target_link_libraries(game2048_tests PRIVATE game2048_ai)

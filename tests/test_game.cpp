@@ -2,6 +2,7 @@
 
 #include "../src/board.h"
 #include "../src/game.h"
+#include "../src/rng.h"
 #include "test_framework.h"
 
 namespace {
@@ -9,6 +10,8 @@ namespace {
 using game2048::Board;
 using game2048::Direction;
 using game2048::Game;
+using game2048::GameSnapshot;
+using game2048::Random;
 
 Board MakeBoard(const std::array<std::array<int, 4>, 4>& rows) {
     return Board::FromRows(rows);
@@ -17,18 +20,21 @@ Board MakeBoard(const std::array<std::array<int, 4>, 4>& rows) {
 }  // namespace
 
 TEST_CASE(Game_InvalidMove_DoesNotSpawn) {
-    for (std::uint64_t seed = 1; seed < 10000; ++seed) {
-        Game game(seed);
-        const Board before = game.GetBoard();
-        const auto turn = game.ApplyMove(Direction::Left);
-        if (!turn.moved) {
-            EXPECT_FALSE(turn.spawn.has_value());
-            EXPECT_EQ(game.GetBoard(), before);
-            return;
-        }
-    }
+    Game game(999);
+    Random rng(123456);
+    const Board invalidLeft = MakeBoard({{{2, 0, 0, 0}, {2, 0, 0, 0}, {4, 8, 16, 32}, {64, 128, 256, 512}}});
+    const GameSnapshot snapshot {invalidLeft, 777, false, false, rng.State(), 123456};
 
-    ::game2048::test::Fail("failed to find deterministic invalid opening move");
+    game.Restore(snapshot);
+    const Board before = game.GetBoard();
+    const auto turn = game.ApplyMove(Direction::Left);
+
+    EXPECT_FALSE(turn.moved);
+    EXPECT_FALSE(turn.spawn.has_value());
+    EXPECT_EQ(turn.scoreDelta, 0U);
+    EXPECT_EQ(game.GetBoard(), before);
+    EXPECT_EQ(game.Score(), 777U);
+    EXPECT_FALSE(game.CanUndo());
 }
 
 TEST_CASE(Board_GameOver_Correctness) {

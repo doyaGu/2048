@@ -17,7 +17,8 @@ The project is designed for correctness first, then observability and speed. Ren
 - Iterative deepening, time-budget search, move ordering, transposition table
 - Benchmark mode with summary stats and optional CSV export
 - raylib UI with adaptive layout, overlays, slide / merge / spawn animation
-- Undo, help overlay, autoplay, single-step AI
+- Undo, same-seed restart, modal help, autoplay, single-step AI
+- Explicit interaction state machine for overlays, buffered input, and AI handoff
 - Lightweight unit test suite covering move correctness, equivalence, evaluator behavior, and seed reproducibility
 
 ## Project Layout
@@ -35,6 +36,7 @@ game2048/
     board_fast.h / board_fast.cpp
     rng.h / rng.cpp
     input.h / input.cpp
+    interaction_session.h / interaction_session.cpp
     renderer.h / renderer.cpp
     animation.h / animation.cpp
     layout.h / layout.cpp
@@ -55,6 +57,7 @@ game2048/
     test_board_equivalence.cpp
     test_eval.cpp
     test_game.cpp
+    test_interaction.cpp
 ```
 
 ## Build
@@ -88,14 +91,20 @@ Benchmark mode:
 ## Controls
 
 - `Arrow Keys` / `WASD`: move
-- `R`: restart
+- `R`: restart with the current seed
 - `U`: undo
 - `Space`: toggle autoplay
 - `N`: execute one AI move
 - `Tab`: switch greedy / expectimax AI
 - `T`: cycle animation speed (`Normal`, `Slow`, `Turbo`)
 - `H` / `F1`: help
-- `Esc`: close help or exit
+- `Esc`: dismiss win/help overlays or exit
+
+Interaction notes:
+
+- Reaching `2048` shows a one-shot victory overlay; the game continues after dismissal.
+- Move keys dismiss the victory overlay and immediately execute that move.
+- `Help` is modal and does not buffer hidden moves behind the panel.
 
 ## Architecture
 
@@ -103,6 +112,7 @@ Benchmark mode:
 
 - `board.*`, `board_fast.*`, `game.*`, `rng.*`, `stats.*`, and the AI stack are raylib-free.
 - `renderer.*`, `ui.*`, `layout.*`, `input.*`, and `animation.*` are the only raylib-facing pieces.
+- `interaction_session.*` is the bridge between the deterministic core and the raylib loop.
 - The UI consumes immutable game state snapshots plus move traces. It does not decide rules.
 
 ### 2. Dual board model
@@ -131,6 +141,15 @@ Benchmark mode:
 - undo history
 
 Spawning stays outside raw board movement. A tile is only spawned after a valid move.
+
+`InteractionSession` owns:
+
+- control mode (`Human`, `AIAutoplay`, `AISingleStep`)
+- overlay mode (`None`, `Help`, `Victory`, `GameOver`)
+- input gate (`Accepting`, `BlockedByOverlay`, `BlockedByAnimation`)
+- one-slot buffered move state and held-key repeat timing
+
+This keeps overlay behavior, input buffering, and AI pause/resume rules out of `Game`.
 
 ## Board Implementation
 
@@ -247,6 +266,7 @@ Covered areas:
 - invalid move no-op behavior
 - score accumulation
 - game-over detection
+- interaction state transitions and buffered-input rules
 - reference vs fast board equivalence
 - evaluator ordering sanity
 - deterministic seed reproducibility

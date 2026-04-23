@@ -19,8 +19,18 @@ void Game::Reset(std::uint64_t seed) {
     UpdateTerminalFlags();
 }
 
+void Game::Restore(const GameSnapshot& snapshot) {
+    board_ = snapshot.board;
+    score_ = snapshot.score;
+    gameOver_ = snapshot.gameOver;
+    reached2048_ = snapshot.reached2048;
+    rng_.Seed(snapshot.seed);
+    rng_.RestoreState(snapshot.rngState);
+    undo_.clear();
+}
+
 TurnResult Game::ApplyMove(Direction direction) {
-    const GameSnapshot snapshot {board_, score_, gameOver_, reached2048_, rng_.State()};
+    const GameSnapshot snapshot {board_, score_, gameOver_, reached2048_, rng_.State(), rng_.SeedValue()};
     auto move = board_.ApplyMove(direction);
 
     TurnResult result;
@@ -70,8 +80,12 @@ bool Game::IsGameOver() const {
     return gameOver_;
 }
 
-bool Game::Reached2048() const {
+bool Game::HasReached2048Ever() const {
     return reached2048_;
+}
+
+bool Game::Reached2048() const {
+    return HasReached2048Ever();
 }
 
 std::uint64_t Game::Seed() const {
@@ -83,7 +97,7 @@ bool Game::CanUndo() const {
 }
 
 void Game::PushUndo() {
-    undo_.push_back({board_, score_, gameOver_, reached2048_, rng_.State()});
+    undo_.push_back({board_, score_, gameOver_, reached2048_, rng_.State(), rng_.SeedValue()});
 }
 
 void Game::UpdateTerminalFlags() {

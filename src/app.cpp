@@ -15,6 +15,7 @@
 #include "board_fast.h"
 #include "game.h"
 #include "input.h"
+#include "interaction_session.h"
 #include "layout.h"
 #include "renderer.h"
 #include "ui.h"
@@ -128,6 +129,7 @@ int App::Run(int argc, char** argv) {
     SetTargetFPS(kTargetFps);
 
     Game game(options.seed);
+    InteractionSession session(options.seed);
     ai::AIEngine engine;
     engine.SetAgent(options.agent);
     engine.Expectimax().SetConfig(options.search);
@@ -137,45 +139,37 @@ int App::Run(int argc, char** argv) {
     UI ui;
 
     std::uint32_t bestScore = LoadBestScore();
-    bool autoPlay = false;
-    bool showHelp = false;
-    bool showVictoryOverlay = false;
-    bool shakeTriggered = false;
-    std::uint64_t resetSeed = options.seed;
     SearchStats lastSearch {};
     ai::MoveDecision recommendation {};
     bool recommendationDirty = true;
 
-    // --- Interaction state: buffered move + key-repeat ---
-    std::optional<Direction> pendingMove {};
-    std::optional<Direction> lastHeldDir {};
-    double repeatDeadline = 0.0;
-    constexpr double kRepeatDelay  = 0.20;  // 200 ms before first repeat
-    constexpr double kRepeatPeriod = 0.075; // 75 ms between repeats (~13/sec)
+    auto invalidateRecommendation = [&]() {
+        recommendation = {};
+        lastSearch = {};
+        recommendationDirty = true;
+    };
 
     auto executeMove = [&](Direction direction, const SearchStats* searchStats) {
         const Board before = game.GetBoard();
-        const bool hadReached2048 = game.Reached2048();
+        const bool wasGameOver = game.IsGameOver();
         const auto turn = game.ApplyMove(direction);
         if (!turn.moved) {
             return false;
         }
+
         animation.Start(before, game.GetBoard(), turn.trace, turn.spawn);
         if (searchStats != nullptr) {
             lastSearch = *searchStats;
         }
+
         if (game.Score() > bestScore) {
             bestScore = game.Score();
             SaveBestScore(bestScore);
         }
+
         recommendationDirty = true;
-        if (!hadReached2048 && game.Reached2048()) {
-            showVictoryOverlay = true;
-        }
-        // Trigger screen shake exactly once when the game ends
-        if (game.IsGameOver() && !shakeTriggered) {
+        if (!wasGameOver && game.IsGameOver()) {
             animation.TriggerShake(6.0F, 0.45F);
-            shakeTriggered = true;
         }
         return true;
     };
@@ -183,102 +177,62 @@ int App::Run(int argc, char** argv) {
     while (!WindowShouldClose()) {
         animation.Update(GetFrameTime());
 
-        // --- Input capture: always poll, even during animation ---
-        // First press fires immediately and resets the repeat timer.
-        // Held key repeats after kRepeatDelay with period kRepeatPeriod.
-        // (Only buffered in human mode — AI mode ignores these.)
-        if (!autoPlay && !game.IsGameOver() && !showHelp) {
-            if (const auto pressed = PollMoveInput(); pressed.has_value()) {
-                // Fresh key press: buffer it and reset repeat tracking
-                pendingMove  = pressed;
-                lastHeldDir  = pressed;
-                repeatDeadline = GetTime() + kRepeatDelay;
-            } else {
-                const auto held = PollMoveInputHeld();
-                if (held != lastHeldDir) {
-                    // Key changed or released: reset timer
-                    lastHeldDir   = held;
-                    repeatDeadline = GetTime() + kRepeatDelay;
-                } else if (held.has_value() && GetTime() >= repeatDeadline) {
-                    // Key held past deadline: queue a repeat
-                    pendingMove   = held;
-                    repeatDeadline = GetTime() + kRepeatPeriod;
-                }
-            }
+        const bool animationBlocksInput = animation.Active() && animation.Speed() != AnimationSpeed::Turbo;
+
+        InteractionInput input {};
+        input.nowSeconds = GetTime();
+        input.animationBlocksInput = animationBlocksInput;
+        input.gameOver = game.IsGameOver();
+        input.reached2048Ever = game.HasReached2048Ever();
+        input.pressedMove = PollMoveInput();
+        input.heldMove = PollMoveInputHeld();
+        if (!animation.Active()) {
+            input.command = PollCommandInput();
         }
 
-        if (!animation.Active()) {
-            const InputCommand command = PollCommandInput();
-            switch (command) {
-                case InputCommand::Reset:
-                    game.Reset(resetSeed);
-                    recommendationDirty = true;
-                    showVictoryOverlay = false;
-                    shakeTriggered = false;
-                    pendingMove = std::nullopt;
-                    break;
-                case InputCommand::Undo:
-                    if (game.Undo()) {
-                        recommendationDirty = true;
-                        showVictoryOverlay = false;
-                        shakeTriggered = false;
-                    }
-                    pendingMove = std::nullopt;
-                    break;
-                case InputCommand::ToggleAutoAI:
-                    autoPlay = !autoPlay;
-                    showVictoryOverlay = false;
-                    pendingMove = std::nullopt;  // discard buffered human move
-                    break;
-                case InputCommand::StepAI: {
-                    showVictoryOverlay = false;
-                    const auto decision = engine.Recommend(FastBoard::FromReference(game.GetBoard()));
-                    recommendation = decision;
-                    executeMove(decision.direction, &decision.stats);
-                    break;
-                }
-                case InputCommand::CycleAgent:
-                    options.agent = NextAgent(options.agent);
-                    engine.SetAgent(options.agent);
-                    recommendationDirty = true;
-                    break;
-                case InputCommand::CycleAnimationSpeed:
-                    animation.SetSpeed(NextSpeed(animation.Speed()));
-                    break;
-                case InputCommand::ToggleHelp:
-                    showHelp = !showHelp;
-                    break;
-                case InputCommand::Exit:
-                    if (showHelp) {
-                        showHelp = false;
-                    } else {
-                        CloseWindow();
-                        return 0;
-                    }
-                    break;
-                case InputCommand::None:
-                    break;
-            }
+        const auto actions = session.Tick(input);
 
-            if (!autoPlay) {
-                // Apply buffered or freshly-pressed move
-                if (pendingMove.has_value()) {
-                    showVictoryOverlay = false;
-                    executeMove(*pendingMove, nullptr);
-                    pendingMove = std::nullopt;
-                }
-            } else if (!game.IsGameOver()) {
-                showVictoryOverlay = false;
-                const auto decision = engine.Recommend(FastBoard::FromReference(game.GetBoard()));
-                recommendation = decision;
-                executeMove(decision.direction, &decision.stats);
-            }
+        if (actions.exitRequested) {
+            CloseWindow();
+            return 0;
+        }
 
-            if (recommendationDirty && !game.IsGameOver()) {
-                recommendation = engine.Recommend(FastBoard::FromReference(game.GetBoard()));
-                lastSearch = recommendation.stats;
-                recommendationDirty = false;
-            }
+        if (actions.cycleAgentRequested) {
+            options.agent = NextAgent(options.agent);
+            engine.SetAgent(options.agent);
+            invalidateRecommendation();
+        }
+
+        if (actions.cycleAnimationRequested) {
+            animation.SetSpeed(NextSpeed(animation.Speed()));
+        }
+
+        if (actions.resetRequested) {
+            game.Reset(game.Seed());
+            session.OnReset(game.Seed());
+            invalidateRecommendation();
+        }
+
+        if (actions.undoRequested && game.Undo()) {
+            invalidateRecommendation();
+        }
+
+        if (actions.hintInvalidated) {
+            recommendationDirty = true;
+        }
+
+        if (actions.moveToExecute.has_value()) {
+            executeMove(*actions.moveToExecute, nullptr);
+        } else if (actions.aiMoveRequested && !game.IsGameOver()) {
+            const auto decision = engine.Recommend(FastBoard::FromReference(game.GetBoard()));
+            recommendation = decision;
+            executeMove(decision.direction, &decision.stats);
+        }
+
+        if (recommendationDirty && !game.IsGameOver()) {
+            recommendation = engine.Recommend(FastBoard::FromReference(game.GetBoard()));
+            lastSearch = recommendation.stats;
+            recommendationDirty = false;
         }
 
         const auto layout = ComputeLayout(GetScreenWidth(), GetScreenHeight());
@@ -287,12 +241,14 @@ int App::Run(int argc, char** argv) {
             game.Score(),
             bestScore,
             game.GetBoard().MaxTile(),
-            autoPlay,
             game.IsGameOver(),
-            game.Reached2048(),
-            showVictoryOverlay,
-            showHelp,
+            game.HasReached2048Ever(),
+            session.CanDismissOverlay(),
+            session.ShowContinueHint(),
             game.Seed(),
+            session.Control(),
+            session.Overlay(),
+            session.Gate(),
             options.agent,
             recommendation,
             lastSearch,

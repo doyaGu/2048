@@ -27,6 +27,7 @@ struct GameSnapshot {
     bool gameOver = false;
     bool reached2048 = false;
     Random::EngineState rngState {};
+    std::uint64_t seed = kDefaultSeed;
 };
 
 class Game {
@@ -34,12 +35,14 @@ public:
     explicit Game(std::uint64_t seed = kDefaultSeed);
 
     void Reset(std::uint64_t seed);
+    void Restore(const GameSnapshot& snapshot);
     TurnResult ApplyMove(Direction direction);
     bool Undo();
 
     const Board& GetBoard() const;
     std::uint32_t Score() const;
     bool IsGameOver() const;
+    bool HasReached2048Ever() const;
     bool Reached2048() const;
     std::uint64_t Seed() const;
     bool CanUndo() const;

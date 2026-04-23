@@ -62,7 +62,7 @@ InputSystem::InputSystem()
 InputFrame InputSystem::BuildFrame(const RawInputState& raw,
                                    const LayoutMetrics& layout,
                                    bool /*touchHudActive*/,
-                                   bool /*animationBlocksInput*/,
+                                   bool animationBlocksInput,
                                    OverlayMode overlayMode) {
     InputFrame frame {};
 
@@ -73,11 +73,27 @@ InputFrame InputSystem::BuildFrame(const RawInputState& raw,
         return frame;
     }
 
+    if (overlayMode != OverlayMode::None) {
+        ControlId gamepadPrimary = ControlId::None;
+        InputCommand command = ResolveGamepadCommand(raw, overlayMode, gamepadPrimary);
+        if (gamepadPrimary != ControlId::None) {
+            frame.primaryControl = gamepadPrimary;
+        }
+        if (command == InputCommand::None) {
+            command = ResolveKeyboardCommand(raw);
+        }
+        frame.command = command;
+        return frame;
+    }
+
     const ControlId pointerControl = pointer_.HitTestControl(raw.pointers[0], layout);
     if (pointerControl != ControlId::None && raw.pointers[0].pressed) {
         frame.primaryControl = pointerControl;
         frame.command = CommandForControl(pointerControl);
         if (frame.command == InputCommand::None) {
+            if (animationBlocksInput) {
+                return InputFrame {};
+            }
             frame.pressedMove = MoveForControl(pointerControl);
         }
         if (frame.command != InputCommand::None || frame.pressedMove.has_value()) {
@@ -95,6 +111,10 @@ InputFrame InputSystem::BuildFrame(const RawInputState& raw,
     }
     if (command != InputCommand::None) {
         frame.command = command;
+        return frame;
+    }
+
+    if (animationBlocksInput) {
         return frame;
     }
 

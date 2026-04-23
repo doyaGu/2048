@@ -157,7 +157,7 @@ int App::Run(int argc, char** argv) {
 
         const std::vector<RuntimeEvent> events = eventMapper.BuildEvents(frame, snapshot.overlayMode, rawInput.nowSeconds);
 
-        snapshot = runtime.Tick(events, rawInput.nowSeconds);
+        snapshot = runtime.Tick(events, rawInput.nowSeconds, animationBlocksInput);
         animation.SetSpeed(snapshot.animationSpeed);
         if (snapshot.lastMove.has_value() && snapshot.lastMove->revision != animatedMoveRevision) {
             animation.Start(snapshot.lastMove->before,
@@ -168,6 +168,9 @@ int App::Run(int argc, char** argv) {
                 animation.TriggerShake(6.0F, 0.45F);
             }
             animatedMoveRevision = snapshot.lastMove->revision;
+        } else if (!snapshot.lastMove.has_value() && snapshot.boardRevision != animatedMoveRevision) {
+            animation.Reset();
+            animatedMoveRevision = snapshot.boardRevision;
         }
 
         if (snapshot.quitRequested) {

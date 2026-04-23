@@ -201,6 +201,42 @@ TEST_CASE(InputSystem_HelpOverlay_OnlyCenteredButtonIsClickable) {
     EXPECT_EQ(stray.command, game2048::InputCommand::None);
 }
 
+TEST_CASE(InputSystem_HelpOverlay_DoesNotRouteUnderlyingControls) {
+    InputSystem system;
+    RawInputState raw {};
+    const auto layout = ComputeLayout(1280, 720);
+
+    raw.pointers[0].connected = true;
+    raw.pointers[0].pressed = true;
+    for (std::size_t index = 0; index < layout.controlCount; ++index) {
+        if (layout.controlIds[index] == ControlId::Restart) {
+            raw.pointers[0].position = {layout.controlRects[index].x + layout.controlRects[index].width * 0.5F,
+                                        layout.controlRects[index].y + layout.controlRects[index].height * 0.5F};
+            break;
+        }
+    }
+
+    const auto frame = system.BuildFrame(raw, layout, false, false, OverlayMode::Help);
+
+    EXPECT_EQ(frame.command, game2048::InputCommand::None);
+    EXPECT_EQ(frame.primaryControl, ControlId::None);
+}
+
+TEST_CASE(InputSystem_AnimationGate_BlocksGameplayMoves) {
+    InputSystem system;
+    RawInputState raw {};
+    const auto layout = ComputeLayout(1280, 720);
+
+    raw.keyboard.pressedDirections[static_cast<std::size_t>(game2048::RawDirectionKeySlot::LeftArrow)] = true;
+    raw.keyboard.heldDirections[static_cast<std::size_t>(game2048::RawDirectionKeySlot::LeftArrow)] = true;
+
+    const auto frame = system.BuildFrame(raw, layout, false, true, OverlayMode::None);
+
+    EXPECT_EQ(frame.command, game2048::InputCommand::None);
+    EXPECT_FALSE(frame.pressedMove.has_value());
+    EXPECT_FALSE(frame.heldMove.has_value());
+}
+
 TEST_CASE(InputSystem_VictoryOverlay_BackButton_TogglesAutoplay) {
     InputSystem system;
     RawInputState raw {};

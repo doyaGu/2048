@@ -242,55 +242,71 @@ void UI::DrawPanels(const LayoutMetrics& layout, const HUDState& state) const {
     float y = layout.panelRect.y + std::max(8.0F, 12.0F * style.scale);
 
     DrawSectionHeader(layout.panelRect, y, "Status", style);
-    DrawInfoLine(x, y, innerW, "Mode", ControlModeName(state.controlMode), style);
-    DrawInfoLine(x, y, innerW, "AI", AgentName(state.agentKind), style);
-    DrawInfoLine(x, y, innerW, "Gate", InputGateName(state.inputGate), style);
-    DrawInfoLine(x, y, innerW, "Anim", AnimationName(state.animationSpeed), style);
-    DrawInfoLine(x, y, innerW, "Max Tile", std::to_string(state.maxTile), style);
-    DrawInfoLine(x, y, innerW, "Goal", state.achieved2048 ? "2048 reached" : "In progress", style);
-    DrawInfoLine(x, y, innerW, "Seed", std::to_string(state.seed), style);
-    DrawInfoLine(x, y, innerW, "Hint", state.recommendation.valid ? DirectionName(state.recommendation.direction) : "-", style);
+    const std::array<std::pair<const char*, std::string>, 8> statusLines {{
+        {"Mode",     ControlModeName(state.controlMode)},
+        {"AI",       AgentName(state.agentKind)},
+        {"Gate",     InputGateName(state.inputGate)},
+        {"Anim",     AnimationName(state.animationSpeed)},
+        {"Max Tile", std::to_string(state.maxTile)},
+        {"Goal",     state.achieved2048 ? "2048 reached" : "In progress"},
+        {"Seed",     std::to_string(state.seed)},
+        {"Hint",     state.recommendation.valid ? DirectionName(state.recommendation.direction) : "-"},
+    }};
+    for (const auto& [label, value] : statusLines) {
+        DrawInfoLine(x, y, innerW, label, value, style);
+    }
 
     y += style.divGap;
     DrawDivider(layout.panelRect, y);
     y += style.divGap;
     DrawSectionHeader(layout.panelRect, y, "Search", style);
-    DrawInfoLine(x, y, innerW, "Depth", std::to_string(state.lastSearch.maxDepthReached), style);
-    DrawInfoLine(x, y, innerW, "Nodes", std::to_string(state.lastSearch.nodes), style);
-    DrawInfoLine(x, y, innerW, "TT Hits", std::to_string(state.lastSearch.cacheHits), style);
-    DrawInfoLine(x, y, innerW, "Eval", TextFormat("%.1f", state.lastSearch.evaluation), style);
-    DrawInfoLine(x, y, innerW, "Think ms", TextFormat("%.2f", state.lastSearch.elapsedMs), style);
-    DrawInfoLine(x, y, innerW, "FPS", std::to_string(GetFPS()), style);
+    const std::array<std::pair<const char*, std::string>, 6> searchLines {{
+        {"Depth",    std::to_string(state.lastSearch.maxDepthReached)},
+        {"Nodes",    std::to_string(state.lastSearch.nodes)},
+        {"TT Hits",  std::to_string(state.lastSearch.cacheHits)},
+        {"Eval",     TextFormat("%.1f", state.lastSearch.evaluation)},
+        {"Think ms", TextFormat("%.2f", state.lastSearch.elapsedMs)},
+        {"FPS",      std::to_string(GetFPS())},
+    }};
+    for (const auto& [label, value] : searchLines) {
+        DrawInfoLine(x, y, innerW, label, value, style);
+    }
 
     y += style.divGap;
     DrawDivider(layout.panelRect, y);
     y += style.divGap;
     DrawSectionHeader(layout.panelRect, y, "Evaluator", style);
-    DrawEvalRow(x, y, innerW, "Empty", state.evaluatorBreakdown.emptyTiles, style);
-    DrawEvalRow(x, y, innerW, "Mono", state.evaluatorBreakdown.monotonicity, style);
-    DrawEvalRow(x, y, innerW, "Smooth", state.evaluatorBreakdown.smoothness, style);
-    DrawEvalRow(x, y, innerW, "Corner", state.evaluatorBreakdown.cornerMax, style);
-    DrawEvalRow(x, y, innerW, "Merge", state.evaluatorBreakdown.mergePotential, style);
-    DrawEvalRow(x, y, innerW, "Snake", state.evaluatorBreakdown.snakePattern, style);
-    DrawEvalRow(x, y, innerW, "Trap", state.evaluatorBreakdown.trapPenalty, style);
+    struct EvalRowDef { const char* label; double ai::FeatureBreakdown::* field; };
+    static constexpr std::array<EvalRowDef, 7> kEvalRows {{
+        {"Empty",  &ai::FeatureBreakdown::emptyTiles},
+        {"Mono",   &ai::FeatureBreakdown::monotonicity},
+        {"Smooth", &ai::FeatureBreakdown::smoothness},
+        {"Corner", &ai::FeatureBreakdown::cornerMax},
+        {"Merge",  &ai::FeatureBreakdown::mergePotential},
+        {"Snake",  &ai::FeatureBreakdown::snakePattern},
+        {"Trap",   &ai::FeatureBreakdown::trapPenalty},
+    }};
+    for (const auto& row : kEvalRows) {
+        DrawEvalRow(x, y, innerW, row.label, state.evaluatorBreakdown.*row.field, style);
+    }
 
     y += style.divGap;
     DrawDivider(layout.panelRect, y);
     y += style.divGap;
     DrawSectionHeader(layout.panelRect, y, "Keys", style);
+    static constexpr std::array<const char*, 6> kKeyLines {{
+        "Move: Arrows / WASD",
+        "Auto: Space",
+        "Step: N",
+        "Restart: R    Undo: U",
+        "AI: Tab    Speed: T",
+        "Help: H / F1",
+    }};
     const Color keyColor = {58, 59, 84, 255};
-    const float keyWidth = innerW;
-    DrawFittedText("Move: Arrows / WASD", x, y, keyWidth, style.keyFs, keyColor);
-    y += style.keyRowH;
-    DrawFittedText("Auto: Space", x, y, keyWidth, style.keyFs, keyColor);
-    y += style.keyRowH;
-    DrawFittedText("Step: N", x, y, keyWidth, style.keyFs, keyColor);
-    y += style.keyRowH;
-    DrawFittedText("Restart: R    Undo: U", x, y, keyWidth, style.keyFs, keyColor);
-    y += style.keyRowH;
-    DrawFittedText("AI: Tab    Speed: T", x, y, keyWidth, style.keyFs, keyColor);
-    y += style.keyRowH;
-    DrawFittedText("Help: H / F1", x, y, keyWidth, style.keyFs, keyColor);
+    for (const char* line : kKeyLines) {
+        DrawFittedText(line, x, y, innerW, style.keyFs, keyColor);
+        y += style.keyRowH;
+    }
 
     EndScissorMode();
 

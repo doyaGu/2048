@@ -10,23 +10,31 @@ namespace game2048 {
 
 namespace {
 
+struct TileColorEntry { int value; Color fill; };
+
+// Data table: tile face value → background colour.  Extend here to add new tiers.
+static constexpr std::array<TileColorEntry, 13> kTileColorMap {{
+    {0,    {200, 190, 178, 255}},  // empty cell
+    {2,    {240, 232, 222, 255}},
+    {4,    {235, 218, 194, 255}},
+    {8,    {249, 178, 109, 255}},
+    {16,   {252, 148,  86, 255}},
+    {32,   {252, 110,  72, 255}},
+    {64,   {252,  72,  36, 255}},
+    {128,  {249, 212,  92, 255}},
+    {256,  {249, 206,  62, 255}},
+    {512,  {249, 200,  36, 255}},
+    {1024, {249, 194,  18, 255}},
+    {2048, { 56, 202, 168, 255}},  // teal — win tile stands apart
+    {4096, {118,  82, 214, 255}},  // vivid purple
+}};
+static constexpr Color kHighTileColor {92, 68, 168, 255};  // deep purple for 8192+
+
 Color TileFillColor(int value) {
-    switch (value) {
-        case 0:    return {200, 190, 178, 255};
-        case 2:    return {240, 232, 222, 255};
-        case 4:    return {235, 218, 194, 255};
-        case 8:    return {249, 178, 109, 255};
-        case 16:   return {252, 148, 86,  255};
-        case 32:   return {252, 110, 72,  255};
-        case 64:   return {252,  72, 36,  255};
-        case 128:  return {249, 212, 92,  255};
-        case 256:  return {249, 206, 62,  255};
-        case 512:  return {249, 200, 36,  255};
-        case 1024: return {249, 194, 18,  255};
-        case 2048: return { 56, 202, 168, 255};  // teal — win tile stands apart
-        case 4096: return {118,  82, 214, 255};  // vivid purple
-        default:   return { 92,  68, 168, 255};  // deep purple for 8192+
+    for (const auto& entry : kTileColorMap) {
+        if (entry.value == value) return entry.fill;
     }
+    return kHighTileColor;
 }
 
 Color TileTextColor(int value) {
@@ -62,14 +70,14 @@ void DrawTile(Rectangle rect, int value, float scale, unsigned char alpha = 255)
     const Color fill = TileFillColor(value);
 
     // Glow rings for high-value tiles (drawn first — furthest back)
+    struct GlowRing { float expansion; unsigned char alpha; };
+    static constexpr std::array<GlowRing, 3> kGlowRings {{{12.0F, 10}, {7.0F, 20}, {3.5F, 36}}};
     if (value >= 512 && alpha == 255) {
-        const float glowRadii[] = {12.0F, 7.0F, 3.5F};
-        const unsigned char glowAlphas[] = {10, 20, 36};
-        for (int i = 0; i < 3; ++i) {
-            const float exp = glowRadii[i];
-            Rectangle glow = {scaled.x - exp, scaled.y - exp, scaled.width + exp * 2.0F, scaled.height + exp * 2.0F};
+        for (const auto& ring : kGlowRings) {
+            Rectangle glow = {scaled.x - ring.expansion, scaled.y - ring.expansion,
+                              scaled.width + ring.expansion * 2.0F, scaled.height + ring.expansion * 2.0F};
             Color gc = fill;
-            gc.a = glowAlphas[i];
+            gc.a = ring.alpha;
             DrawRectangleRounded(glow, 0.22F, 8, gc);
         }
     }
@@ -153,7 +161,7 @@ void Renderer::DrawBoard(const LayoutMetrics& layout, const Board& board, const 
             fromRect.width,
             fromRect.height
         };
-        DrawTile(current, move.value, 1.0F, static_cast<unsigned char>(255.0F * (1.0F - 0.12F * t)));
+        DrawTile(current, move.value, 1.0F, static_cast<unsigned char>(255.0F * (1.0F - kAnimSlideFadeRate * t)));
     }
 }
 

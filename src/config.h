@@ -25,6 +25,13 @@ constexpr int kDefaultExpectimaxDepth = 4;
 constexpr int kDefaultExpectimaxTimeBudgetMs = 12;
 constexpr std::size_t kDefaultTranspositionTableEntries = 1u << 20;
 
+// Animation timing phases (fractions of total animation duration)
+constexpr float kAnimMergePhaseStart = 0.45F;  // when merge bounce begins
+constexpr float kAnimSpawnPhaseStart = 0.35F;  // when tile spawn begins
+constexpr float kAnimMergeBounceMag  = 0.24F;  // merge scale overshoot amplitude
+constexpr float kAnimSpawnMinScale   = 0.72F;  // initial spawn tile scale (grows to 1.0)
+constexpr float kAnimSlideFadeRate   = 0.12F;  // slide ghost alpha fade coefficient
+
 struct EvaluatorWeights {
     double emptyTiles = 290.0;
     double monotonicity = 47.0;

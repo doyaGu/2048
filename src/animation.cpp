@@ -85,7 +85,7 @@ float AnimationController::SpawnProgress() const {
     if (duration_ <= 0.0F) {
         return 1.0F;
     }
-    const float start = duration_ * 0.35F;
+    const float start = duration_ * kAnimSpawnPhaseStart;
     const float t = std::clamp((elapsed_ - start) / (duration_ - start), 0.0F, 1.0F);
     return EaseOutBack(t);
 }
@@ -98,16 +98,16 @@ float AnimationController::MergeScale(const CellCoord& cell) const {
         if (!MatchesCell(merge.cell, cell)) {
             continue;
         }
-        const float start = duration_ * 0.45F;
+        const float start = duration_ * kAnimMergePhaseStart;
         const float t = std::clamp((elapsed_ - start) / (duration_ - start), 0.0F, 1.0F);
-        return 1.0F + 0.24F * std::sin(t * 3.1415926F);
+        return 1.0F + kAnimMergeBounceMag * std::sin(t * 3.1415926F);
     }
     return 1.0F;
 }
 
 float AnimationController::SpawnScale(const CellCoord& cell) const {
     if (snapshot_.spawn.has_value() && MatchesCell(snapshot_.spawn->cell, cell)) {
-        return 0.72F + 0.28F * SpawnProgress();
+        return kAnimSpawnMinScale + (1.0F - kAnimSpawnMinScale) * SpawnProgress();
     }
     return 1.0F;
 }

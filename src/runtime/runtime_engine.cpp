@@ -32,7 +32,19 @@ T NextValue(const std::array<T, N>& values, T current) {
 RuntimeEngine::RuntimeEngine(RuntimeConfig config)
     : config_(config),
       game_(config.seed) {
+    if (config_.initialBoard.has_value()) {
+        GameSnapshot snapshot;
+        snapshot.board = *config_.initialBoard;
+        snapshot.score = 0;
+        snapshot.gameOver = !snapshot.board.CanMove();
+        snapshot.reached2048 = snapshot.board.HasValue(2048);
+        snapshot.rngState = {};
+        snapshot.seed = config_.seed;
+        game_.Restore(snapshot);
+    }
     worker_.Configure(config_.agent, config_.search);
+    RefreshSnapshot();
+    SyncOverlayState();
     RefreshSnapshot();
     SubmitRecommendationIfNeeded();
 }
@@ -89,6 +101,9 @@ void RuntimeEngine::ApplyEvent(const RuntimeEvent& event) {
             return;
         case RuntimeEventType::ToggleAutoplay:
             if (!OverlayBlocksCommands()) {
+                if (snapshot_.overlayMode == OverlayMode::Victory) {
+                    snapshot_.overlayMode = OverlayMode::None;
+                }
                 snapshot_.controlMode = snapshot_.controlMode == ControlMode::AIAutoplay
                     ? ControlMode::Human
                     : ControlMode::AIAutoplay;

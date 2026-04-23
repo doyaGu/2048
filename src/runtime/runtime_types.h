@@ -63,6 +63,7 @@ struct RuntimeConfig {
     std::uint64_t seed = kDefaultSeed;
     ai::AgentKind agent = ai::AgentKind::Expectimax;
     ai::SearchConfig search {};
+    std::optional<Board> initialBoard {};
 };
 
 struct RuntimeMoveAnimation {

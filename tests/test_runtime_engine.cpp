@@ -97,6 +97,25 @@ TEST_CASE(RuntimeEngine_OverlayAndAutoplay_AreInSnapshot) {
     EXPECT_EQ(snapshot.controlMode, ControlMode::AIAutoplay);
 }
 
+TEST_CASE(RuntimeEngine_ToggleAutoplay_DismissesVictoryOverlay) {
+    RuntimeConfig config = FastConfig(11);
+    config.initialBoard = game2048::Board::FromRows({{
+        {{2048, 0, 0, 0}},
+        {{0, 0, 0, 0}},
+        {{0, 0, 0, 0}},
+        {{0, 0, 0, 0}},
+    }});
+    RuntimeEngine runtime(config);
+
+    auto snapshot = runtime.Tick({}, 0.1);
+    EXPECT_EQ(snapshot.overlayMode, OverlayMode::Victory);
+
+    snapshot = runtime.Tick({RuntimeEvent {RuntimeEventType::ToggleAutoplay, Direction::Left}}, 0.2);
+
+    EXPECT_EQ(snapshot.overlayMode, OverlayMode::None);
+    EXPECT_EQ(snapshot.controlMode, ControlMode::AIAutoplay);
+}
+
 TEST_CASE(RuntimeEngine_AIWorker_PublishesReadyRecommendation) {
     RuntimeEngine runtime(FastConfig(21));
 

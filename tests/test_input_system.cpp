@@ -128,6 +128,19 @@ TEST_CASE(Layout_DesktopPanel_RemainsWithinClusterBounds) {
     EXPECT_TRUE(layout.panelRect.width >= 280.0F);
 }
 
+TEST_CASE(Layout_NarrowWindow_StaysWithinContentBounds) {
+    const auto layout = ComputeLayout(320, 300, false);
+    const float contentLeft = 28.0F;
+    const float contentTop = 28.0F;
+    const float contentRight = 320.0F - 28.0F;
+    const float contentBottom = 300.0F - 28.0F;
+
+    EXPECT_TRUE(layout.clusterRect.x >= contentLeft);
+    EXPECT_TRUE(layout.clusterRect.y >= contentTop);
+    EXPECT_TRUE(layout.clusterRect.x + layout.clusterRect.width <= contentRight);
+    EXPECT_TRUE(layout.clusterRect.y + layout.clusterRect.height <= contentBottom);
+}
+
 TEST_CASE(InputSystem_HelpOverlay_GamepadButtons_DoNotLeak_ToGameplayCommands) {
     InputSystem system;
     RawInputState raw {};

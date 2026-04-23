@@ -123,3 +123,14 @@ TEST_CASE(Interaction_VictoryOverlay_MoveDismissesAndExecutes) {
     EXPECT_EQ(session.Control(), ControlMode::Human);
     EXPECT_EQ(actions.moveToExecute, Direction::Right);
 }
+
+TEST_CASE(Interaction_UndoWithoutHistory_DoesNotInvalidateHint) {
+    InteractionSession session(123);
+
+    InteractionInput undo = MakeInput(false, false);
+    undo.command = InputCommand::Undo;
+    const auto actions = session.Tick(undo);
+
+    EXPECT_TRUE(actions.undoRequested);
+    EXPECT_FALSE(actions.hintInvalidated);
+}

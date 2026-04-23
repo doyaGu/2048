@@ -20,7 +20,6 @@ InteractionActions InteractionSession::Tick(const InteractionInput& input) {
         case InputCommand::Undo:
             if (overlayMode_ != OverlayMode::Help && overlayMode_ != OverlayMode::GameOver) {
                 actions.undoRequested = true;
-                actions.hintInvalidated = true;
                 overlayMode_ = OverlayMode::None;
                 controlMode_ = ControlMode::Human;
                 ClearBufferedInput();

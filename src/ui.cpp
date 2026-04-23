@@ -56,6 +56,42 @@ const char* AnimationName(AnimationSpeed speed) {
     return "Unknown";
 }
 
+const char* ControlLabel(ControlId id) {
+    switch (id) {
+        case ControlId::MoveUp: return "Up";
+        case ControlId::MoveDown: return "Down";
+        case ControlId::MoveLeft: return "Left";
+        case ControlId::MoveRight: return "Right";
+        case ControlId::Restart: return "Restart";
+        case ControlId::Undo: return "Undo";
+        case ControlId::ToggleAutoAI: return "Auto";
+        case ControlId::StepAI: return "Step";
+        case ControlId::CycleAgent: return "AI";
+        case ControlId::CycleAnimationSpeed: return "Speed";
+        case ControlId::ToggleHelp: return "Help";
+        case ControlId::Exit: return "Close";
+        case ControlId::OverlayPrimary: return "OK";
+        case ControlId::OverlaySecondary: return "Back";
+        case ControlId::None: return "";
+    }
+    return "";
+}
+
+void DrawControlButton(Rectangle rect, const char* label, bool active, bool disabled) {
+    Color fill = disabled ? Fade(Color{170, 162, 152, 255}, 0.55F)
+                          : active ? Color{56, 202, 168, 255}
+                                   : Color{119, 110, 101, 235};
+    DrawRectangleRounded(rect, 0.22F, 8, fill);
+    DrawRectangleLinesEx(rect, 1.2F, Fade(RAYWHITE, 0.22F));
+    const int fontSize = std::max(12, static_cast<int>(rect.height * 0.32F));
+    const int textWidth = MeasureText(label, fontSize);
+    DrawText(label,
+             static_cast<int>(rect.x + (rect.width - static_cast<float>(textWidth)) * 0.5F),
+             static_cast<int>(rect.y + (rect.height - static_cast<float>(fontSize)) * 0.5F),
+             fontSize,
+             RAYWHITE);
+}
+
 static constexpr float kBasePanelH = 784.0F;
 
 struct PanelStyle {
@@ -85,7 +121,7 @@ PanelStyle MakeStyle(float panelH, float innerW) {
     style.evalRowH = std::max(13.0F, 27.0F * scale);
     style.keyRowH = std::max(13.0F, 20.0F * scale);
     style.divGap = std::max(3.0F, 6.0F * scale);
-    style.labelColW = std::clamp(innerW * 0.48F, 60.0F, 130.0F);
+    style.labelColW = std::clamp(innerW * 0.44F, 60.0F, 118.0F);
     return style;
 }
 
@@ -102,6 +138,14 @@ void DrawMetricBox(Rectangle rect, const char* label, const std::string& value, 
 
     const int valueY = static_cast<int>(rect.y + rect.height - static_cast<float>(valueFs) - 5.0F);
     DrawText(value.c_str(), static_cast<int>(rect.x + 10.0F), valueY, valueFs, RAYWHITE);
+}
+
+void DrawFittedText(const std::string& text, float x, float y, float maxWidth, int fontSize, Color color) {
+    int fittedFs = fontSize;
+    while (fittedFs > 9 && MeasureText(text.c_str(), fittedFs) > static_cast<int>(maxWidth)) {
+        fittedFs -= 1;
+    }
+    DrawText(text.c_str(), static_cast<int>(x), static_cast<int>(y), fittedFs, color);
 }
 
 void DrawSectionHeader(const Rectangle& panelRect, float& y, const char* title, const PanelStyle& style) {
@@ -165,30 +209,19 @@ void DrawEvalRow(float x, float& y, float innerW, const char* label, double valu
 }  // namespace
 
 void UI::DrawPanels(const LayoutMetrics& layout, const HUDState& state) const {
-    const float topWidth = layout.topBarRect.width;
-    const int titleFs = std::clamp(static_cast<int>(topWidth * 0.034F), 22, 42);
-    const int subtitleFs = std::clamp(static_cast<int>(topWidth * 0.015F), 12, 18);
+    const int titleFs = std::clamp(static_cast<int>(layout.topBarTitleRect.height * 0.70F), 20, 42);
+    DrawFittedText("2048 Engine",
+                   layout.topBarTitleRect.x,
+                   layout.topBarTitleRect.y + (layout.topBarTitleRect.height - static_cast<float>(titleFs)) * 0.5F,
+                   layout.topBarTitleRect.width,
+                   titleFs,
+                   Color{119, 110, 101, 255});
 
-    DrawText("2048 Engine",
-             static_cast<int>(layout.topBarRect.x),
-             static_cast<int>(layout.topBarRect.y + 4.0F),
-             titleFs,
-             Color{119, 110, 101, 255});
-    DrawText("raylib / deterministic / expectimax",
-             static_cast<int>(layout.topBarRect.x),
-             static_cast<int>(layout.topBarRect.y + static_cast<float>(titleFs) + 5.0F),
-             subtitleFs,
-             Color{143, 122, 102, 255});
-
-    const float boxWidth = std::clamp(topWidth * 0.095F, 96.0F, 138.0F);
-    const float boxHeight = layout.topBarRect.height - 4.0F;
-    const float boxGap = 8.0F;
-    const float right = layout.topBarRect.x + topWidth;
-    DrawMetricBox({right - boxWidth * 2.0F - boxGap, layout.topBarRect.y + 2.0F, boxWidth, boxHeight},
+    DrawMetricBox(layout.scoreBoxRects[0],
                   "Score",
                   std::to_string(state.score),
                   Color{246, 124, 95, 255});
-    DrawMetricBox({right - boxWidth, layout.topBarRect.y + 2.0F, boxWidth, boxHeight},
+    DrawMetricBox(layout.scoreBoxRects[1],
                   "Best",
                   std::to_string(state.bestScore),
                   Color{237, 200, 80, 255});
@@ -246,19 +279,27 @@ void UI::DrawPanels(const LayoutMetrics& layout, const HUDState& state) const {
     y += style.divGap;
     DrawSectionHeader(layout.panelRect, y, "Keys", style);
     const Color keyColor = {58, 59, 84, 255};
-    DrawText("Arrows/WASD  Move", static_cast<int>(x), static_cast<int>(y), style.keyFs, keyColor);
+    const float keyWidth = innerW;
+    DrawFittedText("Move: Arrows / WASD", x, y, keyWidth, style.keyFs, keyColor);
     y += style.keyRowH;
-    DrawText("Space  Autoplay", static_cast<int>(x), static_cast<int>(y), style.keyFs, keyColor);
+    DrawFittedText("Auto: Space", x, y, keyWidth, style.keyFs, keyColor);
     y += style.keyRowH;
-    DrawText("N  AI step", static_cast<int>(x), static_cast<int>(y), style.keyFs, keyColor);
+    DrawFittedText("Step: N", x, y, keyWidth, style.keyFs, keyColor);
     y += style.keyRowH;
-    DrawText("R/U  Restart / Undo", static_cast<int>(x), static_cast<int>(y), style.keyFs, keyColor);
+    DrawFittedText("Restart: R    Undo: U", x, y, keyWidth, style.keyFs, keyColor);
     y += style.keyRowH;
-    DrawText("Tab/T  AI / anim", static_cast<int>(x), static_cast<int>(y), style.keyFs, keyColor);
+    DrawFittedText("AI: Tab    Speed: T", x, y, keyWidth, style.keyFs, keyColor);
     y += style.keyRowH;
-    DrawText("H or F1  Help", static_cast<int>(x), static_cast<int>(y), style.keyFs, keyColor);
+    DrawFittedText("Help: H / F1", x, y, keyWidth, style.keyFs, keyColor);
 
     EndScissorMode();
+
+    for (int index = 0; index < layout.controlCount; ++index) {
+        const ControlId id = layout.controlIds[static_cast<std::size_t>(index)];
+        const bool active = id == ControlId::ToggleAutoAI && state.controlMode == ControlMode::AIAutoplay;
+        const bool disabled = state.overlayMode != OverlayMode::None;
+        DrawControlButton(layout.controlRects[static_cast<std::size_t>(index)], ControlLabel(id), active, disabled);
+    }
 }
 
 void UI::DrawOverlay(const LayoutMetrics& layout, const HUDState& state) const {
@@ -296,6 +337,14 @@ void UI::DrawOverlay(const LayoutMetrics& layout, const HUDState& state) const {
             8,
             Fade(Color{100, 88, 76, 255}, 0.14F));
         DrawText(subtitle, static_cast<int>(subtitleX), static_cast<int>(subtitleY), subtitleFs, Color{100, 88, 76, 255});
+
+        if (state.overlayMode == OverlayMode::Victory) {
+            DrawControlButton(layout.overlayActionRects[0], "Continue", false, false);
+            DrawControlButton(layout.overlayActionRects[1], "Auto AI", state.controlMode == ControlMode::AIAutoplay, false);
+        } else if (state.overlayMode == OverlayMode::GameOver) {
+            DrawControlButton(layout.overlayActionRects[0], "Restart", false, false);
+            DrawControlButton(layout.overlayActionRects[1], "Exit", false, false);
+        }
     }
 
     if (state.overlayMode != OverlayMode::Help) {
@@ -389,6 +438,8 @@ void UI::DrawOverlay(const LayoutMetrics& layout, const HUDState& state) const {
     }
 
     EndScissorMode();
+    DrawControlButton(layout.overlayActionRects[0], "Close", false, false);
+    DrawControlButton(layout.overlayActionRects[1], "Close", false, false);
 }
 
 }  // namespace game2048

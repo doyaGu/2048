@@ -1,4 +1,4 @@
-#include "rng.h"
+#include "core/rng.h"
 
 namespace game2048 {
 

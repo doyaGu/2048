@@ -1,11 +1,11 @@
-#include "expectimax.h"
+#include "ai/expectimax.h"
 
 #include <algorithm>
 #include <array>
 #include <limits>
 #include <vector>
 
-#include "../profiler.h"
+#include "shared/profiler.h"
 
 namespace game2048::ai {
 

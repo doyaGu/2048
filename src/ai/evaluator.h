@@ -1,10 +1,7 @@
 #pragma once
 
-#include <string>
-#include <vector>
-
-#include "../board_fast.h"
-#include "../config.h"
+#include "core/board_fast.h"
+#include "core/config.h"
 
 namespace game2048::ai {
 

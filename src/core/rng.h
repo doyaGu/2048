@@ -4,8 +4,8 @@
 #include <random>
 #include <vector>
 
-#include "board.h"
-#include "board_fast.h"
+#include "core/board.h"
+#include "core/board_fast.h"
 
 namespace game2048 {
 

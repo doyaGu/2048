@@ -1,4 +1,4 @@
-#include "board_fast.h"
+#include "core/board_fast.h"
 
 #include <algorithm>
 #include <array>
@@ -52,30 +52,34 @@ void EnsureTables() {
         };
 
         std::array<int, 4> compacted {};
-        int count = 0;
+        std::size_t count = 0;
         for (int rank : ranks) {
             if (rank != 0) {
-                compacted[count++] = rank;
+                compacted[count] = rank;
+                ++count;
             }
         }
 
         std::array<int, 4> output {};
         std::uint32_t score = 0;
-        int write = 0;
-        for (int index = 0; index < count;) {
+        std::size_t write = 0;
+        for (std::size_t index = 0; index < count;) {
             if (index + 1 < count && compacted[index] == compacted[index + 1]) {
                 const int mergedRank = compacted[index] + 1;
-                output[write++] = mergedRank;
+                output[write] = mergedRank;
+                ++write;
                 score += static_cast<std::uint32_t>(1U << mergedRank);
                 index += 2;
             } else {
-                output[write++] = compacted[index++];
+                output[write] = compacted[index];
+                ++write;
+                ++index;
             }
         }
 
         std::uint16_t leftRow = 0;
-        for (int index = 0; index < 4; ++index) {
-            leftRow |= static_cast<std::uint16_t>(output[index] << (index * 4));
+        for (std::size_t index = 0; index < output.size(); ++index) {
+            leftRow |= static_cast<std::uint16_t>(output[index] << (index * 4U));
         }
 
         tables.leftResult[row] = leftRow;
@@ -114,10 +118,11 @@ FastBoard::FastBoard(std::uint64_t bits)
 FastBoard FastBoard::FromReference(const Board& board) {
     EnsureTables();
     std::uint64_t bits = 0;
-    for (int index = 0; index < kCellCount; ++index) {
-        const int value = board.Cells()[index];
+    std::size_t index = 0;
+    for (int value : board.Cells()) {
         const int rank = value == 0 ? 0 : ValueToRank(value);
-        bits |= static_cast<std::uint64_t>(rank & 0xF) << (index * 4);
+        bits |= static_cast<std::uint64_t>(rank & 0xF) << (index * 4U);
+        ++index;
     }
     return FastBoard(bits);
 }

@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <vector>
 
-#include "../board.h"
+#include "core/board.h"
 
 namespace game2048::ai {
 

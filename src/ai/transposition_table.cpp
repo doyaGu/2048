@@ -1,4 +1,4 @@
-#include "transposition_table.h"
+#include "ai/transposition_table.h"
 
 #include <algorithm>
 

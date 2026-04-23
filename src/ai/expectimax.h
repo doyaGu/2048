@@ -2,11 +2,11 @@
 
 #include <chrono>
 
-#include "../board_fast.h"
-#include "../stats.h"
-#include "evaluator.h"
-#include "greedy.h"
-#include "transposition_table.h"
+#include "core/board_fast.h"
+#include "shared/stats.h"
+#include "ai/evaluator.h"
+#include "ai/greedy.h"
+#include "ai/transposition_table.h"
 
 namespace game2048::ai {
 

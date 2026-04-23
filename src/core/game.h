@@ -3,8 +3,8 @@
 #include <optional>
 #include <vector>
 
-#include "board.h"
-#include "rng.h"
+#include "core/board.h"
+#include "core/rng.h"
 
 namespace game2048 {
 

@@ -1,6 +1,7 @@
-#include "board.h"
+#include "core/board.h"
 
 #include <algorithm>
+#include <cassert>
 #include <sstream>
 
 namespace game2048 {
@@ -14,21 +15,31 @@ struct LineTile {
 
 using LinePositions = std::array<CellCoord, kBoardSize>;
 
+std::size_t CellIndex(int row, int col) {
+    assert(row >= 0 && row < kBoardSize);
+    assert(col >= 0 && col < kBoardSize);
+
+    const auto rowIndex = static_cast<std::size_t>(row);
+    const auto colIndex = static_cast<std::size_t>(col);
+    return rowIndex * static_cast<std::size_t>(kBoardSize) + colIndex;
+}
+
 LinePositions PositionsForLine(Direction direction, int line) {
     LinePositions positions {};
-    for (int offset = 0; offset < kBoardSize; ++offset) {
+    for (std::size_t offset = 0; offset < positions.size(); ++offset) {
+        const int coordinate = static_cast<int>(offset);
         switch (direction) {
             case Direction::Left:
-                positions[offset] = {line, offset};
+                positions[offset] = {line, coordinate};
                 break;
             case Direction::Right:
-                positions[offset] = {line, kBoardSize - 1 - offset};
+                positions[offset] = {line, kBoardSize - 1 - coordinate};
                 break;
             case Direction::Up:
-                positions[offset] = {offset, line};
+                positions[offset] = {coordinate, line};
                 break;
             case Direction::Down:
-                positions[offset] = {kBoardSize - 1 - offset, line};
+                positions[offset] = {kBoardSize - 1 - coordinate, line};
                 break;
         }
     }
@@ -44,20 +55,20 @@ Board::Board(const Storage& cells)
 
 Board Board::FromRows(const std::array<std::array<int, kBoardSize>, kBoardSize>& rows) {
     Storage cells {};
-    for (int row = 0; row < kBoardSize; ++row) {
-        for (int col = 0; col < kBoardSize; ++col) {
-            cells[row * kBoardSize + col] = rows[row][col];
+    for (std::size_t row = 0; row < rows.size(); ++row) {
+        for (std::size_t col = 0; col < rows[row].size(); ++col) {
+            cells[row * rows[row].size() + col] = rows[row][col];
         }
     }
     return Board(cells);
 }
 
 int Board::At(int row, int col) const {
-    return cells_[row * kBoardSize + col];
+    return cells_[CellIndex(row, col)];
 }
 
 void Board::Set(int row, int col, int value) {
-    cells_[row * kBoardSize + col] = value;
+    cells_[CellIndex(row, col)] = value;
 }
 
 const Board::Storage& Board::Cells() const {
@@ -68,8 +79,8 @@ MoveResult Board::ApplyMove(Direction direction) {
     MoveResult result;
     Storage next = cells_;
 
-    for (int line = 0; line < kBoardSize; ++line) {
-        const auto positions = PositionsForLine(direction, line);
+    for (std::size_t line = 0; line < static_cast<std::size_t>(kBoardSize); ++line) {
+        const auto positions = PositionsForLine(direction, static_cast<int>(line));
 
         std::vector<LineTile> tiles;
         tiles.reserve(kBoardSize);
@@ -80,14 +91,14 @@ MoveResult Board::ApplyMove(Direction direction) {
             }
         }
 
-        int writeIndex = 0;
+        std::size_t writeIndex = 0;
         for (std::size_t index = 0; index < tiles.size();) {
             const auto& current = tiles[index];
             if (index + 1 < tiles.size() && tiles[index + 1].value == current.value) {
                 const int mergedValue = current.value * 2;
-                const auto destination = positions[writeIndex];
+            const auto destination = positions[writeIndex];
 
-                next[destination.row * kBoardSize + destination.col] = mergedValue;
+                next[CellIndex(destination.row, destination.col)] = mergedValue;
                 result.scoreDelta += static_cast<std::uint32_t>(mergedValue);
                 result.trace.merges.push_back({destination, mergedValue});
 
@@ -103,7 +114,7 @@ MoveResult Board::ApplyMove(Direction direction) {
                 index += 2;
             } else {
                 const auto destination = positions[writeIndex];
-                next[destination.row * kBoardSize + destination.col] = current.value;
+                next[CellIndex(destination.row, destination.col)] = current.value;
                 if (current.from.row != destination.row || current.from.col != destination.col) {
                     result.trace.moves.push_back({current.from, destination, current.value, false});
                 }
@@ -112,9 +123,9 @@ MoveResult Board::ApplyMove(Direction direction) {
             }
         }
 
-        for (; writeIndex < kBoardSize; ++writeIndex) {
+        for (; writeIndex < positions.size(); ++writeIndex) {
             const auto destination = positions[writeIndex];
-            next[destination.row * kBoardSize + destination.col] = 0;
+            next[CellIndex(destination.row, destination.col)] = 0;
         }
     }
 

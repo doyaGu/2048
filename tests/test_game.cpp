@@ -1,8 +1,8 @@
 #include <array>
 
-#include "../src/board.h"
-#include "../src/game.h"
-#include "../src/rng.h"
+#include "../src/core/board.h"
+#include "../src/core/game.h"
+#include "../src/core/rng.h"
 #include "test_framework.h"
 
 namespace {

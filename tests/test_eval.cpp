@@ -1,8 +1,8 @@
 #include "../src/ai/evaluator.h"
 #include "../src/ai/expectimax.h"
 #include "../src/ai/transposition_table.h"
-#include "../src/board.h"
-#include "../src/board_fast.h"
+#include "../src/core/board.h"
+#include "../src/core/board_fast.h"
 #include "test_framework.h"
 
 namespace game2048::ai {

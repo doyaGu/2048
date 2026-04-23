@@ -1,4 +1,4 @@
-#include "greedy.h"
+#include "ai/greedy.h"
 
 #include <array>
 #include <limits>

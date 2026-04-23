@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-#include "board.h"
+#include "core/board.h"
 
 namespace game2048 {
 

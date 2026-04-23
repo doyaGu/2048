@@ -1,8 +1,8 @@
 #include <array>
 
-#include "../src/board.h"
-#include "../src/board_fast.h"
-#include "../src/rng.h"
+#include "../src/core/board.h"
+#include "../src/core/board_fast.h"
+#include "../src/core/rng.h"
 #include "test_framework.h"
 
 namespace {
@@ -14,19 +14,21 @@ using game2048::Random;
 
 Board RandomBoard(Random& rng) {
     std::array<int, 16> cells {};
-    for (int index = 0; index < 16; ++index) {
+    for (auto& cell : cells) {
         const std::uint32_t bucket = rng.NextU32() % 8U;
         if (bucket == 0U) {
-            cells[index] = 0;
+            cell = 0;
         } else {
-            cells[index] = 1 << bucket;
+            cell = 1 << bucket;
         }
     }
 
     Board board;
+    std::size_t index = 0;
     for (int row = 0; row < 4; ++row) {
         for (int col = 0; col < 4; ++col) {
-            board.Set(row, col, cells[row * 4 + col]);
+            board.Set(row, col, cells[index]);
+            ++index;
         }
     }
     return board;

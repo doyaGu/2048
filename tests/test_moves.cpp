@@ -1,8 +1,8 @@
 #include <array>
 
-#include "../src/board.h"
-#include "../src/game.h"
-#include "../src/rng.h"
+#include "../src/core/board.h"
+#include "../src/core/game.h"
+#include "../src/core/rng.h"
 #include "test_framework.h"
 
 namespace {
@@ -16,9 +16,11 @@ Board MakeBoard(const std::array<std::array<int, 4>, 4>& rows) {
 
 std::array<int, 16> Flatten(const Board& board) {
     std::array<int, 16> out {};
+    std::size_t index = 0;
     for (int row = 0; row < 4; ++row) {
         for (int col = 0; col < 4; ++col) {
-            out[row * 4 + col] = board.At(row, col);
+            out[index] = board.At(row, col);
+            ++index;
         }
     }
     return out;

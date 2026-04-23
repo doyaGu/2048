@@ -1,8 +1,8 @@
 #pragma once
 
-#include "../board_fast.h"
-#include "../stats.h"
-#include "evaluator.h"
+#include "core/board_fast.h"
+#include "shared/stats.h"
+#include "ai/evaluator.h"
 
 namespace game2048::ai {
 

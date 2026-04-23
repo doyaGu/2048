@@ -1,4 +1,4 @@
-#include "evaluator.h"
+#include "ai/evaluator.h"
 
 #include <algorithm>
 #include <array>
@@ -10,7 +10,7 @@ namespace {
 
 double LinePenalty(const std::array<int, kBoardSize>& line, bool decreasing) {
     double penalty = 0.0;
-    for (int index = 0; index + 1 < kBoardSize; ++index) {
+    for (std::size_t index = 0; index + 1 < line.size(); ++index) {
         const int current = line[index];
         const int next = line[index + 1];
         if (decreasing) {
@@ -28,15 +28,15 @@ double ComputeMonotonicity(const FastBoard& board) {
     double penalty = 0.0;
     for (int row = 0; row < kBoardSize; ++row) {
         std::array<int, kBoardSize> line {};
-        for (int col = 0; col < kBoardSize; ++col) {
-            line[col] = board.GetRank(row * kBoardSize + col);
+        for (std::size_t col = 0; col < line.size(); ++col) {
+            line[col] = board.GetRank(row * kBoardSize + static_cast<int>(col));
         }
         penalty += std::min(LinePenalty(line, true), LinePenalty(line, false));
     }
     for (int col = 0; col < kBoardSize; ++col) {
         std::array<int, kBoardSize> line {};
-        for (int row = 0; row < kBoardSize; ++row) {
-            line[row] = board.GetRank(row * kBoardSize + col);
+        for (std::size_t row = 0; row < line.size(); ++row) {
+            line[row] = board.GetRank(static_cast<int>(row) * kBoardSize + col);
         }
         penalty += std::min(LinePenalty(line, true), LinePenalty(line, false));
     }
@@ -125,8 +125,8 @@ double ComputeSnakePattern(const FastBoard& board) {
     double best = 0.0;
     for (const auto& table : kSnakeWeightTables) {
         double score = 0.0;
-        for (int index = 0; index < kCellCount; ++index) {
-            score += static_cast<double>(board.GetValue(index)) * table[index];
+        for (std::size_t index = 0; index < table.size(); ++index) {
+            score += static_cast<double>(board.GetValue(static_cast<int>(index))) * table[index];
         }
         best = std::max(best, score);
     }

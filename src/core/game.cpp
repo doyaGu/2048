@@ -1,4 +1,4 @@
-#include "game.h"
+#include "core/game.h"
 
 namespace game2048 {
 

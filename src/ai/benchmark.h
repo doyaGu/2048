@@ -4,10 +4,10 @@
 #include <string>
 #include <vector>
 
-#include "../board_fast.h"
-#include "../rng.h"
-#include "../stats.h"
-#include "ai_engine.h"
+#include "core/board_fast.h"
+#include "core/rng.h"
+#include "shared/stats.h"
+#include "ai/ai_engine.h"
 
 namespace game2048::ai {
 

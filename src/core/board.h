@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-#include "config.h"
+#include "core/config.h"
 
 namespace game2048 {
 

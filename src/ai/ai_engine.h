@@ -1,8 +1,8 @@
 #pragma once
 
-#include "../board_fast.h"
-#include "expectimax.h"
-#include "greedy.h"
+#include "core/board_fast.h"
+#include "ai/expectimax.h"
+#include "ai/greedy.h"
 
 namespace game2048::ai {
 

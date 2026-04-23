@@ -13,6 +13,8 @@ struct FeatureBreakdown {
     double mergePotential = 0.0;
     double snakePattern = 0.0;
     double trapPenalty = 0.0;
+    double mobility = 0.0;
+    double danger = 0.0;
     double total = 0.0;
 };
 
@@ -25,6 +27,8 @@ struct EvaluatorConfig {
     bool useMergePotential = true;
     bool useSnakePattern = true;
     bool useTrapPenalty = true;
+    bool useMobility = true;
+    bool useDanger = true;
 };
 
 class Evaluator {

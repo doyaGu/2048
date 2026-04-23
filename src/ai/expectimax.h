@@ -1,6 +1,7 @@
 #pragma once
 
 #include <chrono>
+#include <vector>
 
 #include "core/board_fast.h"
 #include "shared/stats.h"
@@ -17,9 +18,12 @@ struct SearchConfig {
     int timeBudgetMs = kDefaultExpectimaxTimeBudgetMs;
     bool iterativeDeepening = true;
     bool useTranspositionTable = true;
-    bool approximateChanceNodes = false;
-    int maxChanceBranchesPerValue = 0;
+    bool approximateChanceNodes = true;
+    int maxChanceBranchesPerValue = 6;
 };
+
+std::vector<int> SelectChanceCellsForSearch(const FastBoard& board, const Evaluator& evaluator,
+                                            const SearchConfig& config);
 
 class ExpectimaxAgent {
 public:

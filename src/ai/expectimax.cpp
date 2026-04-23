@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <limits>
+#include <utility>
 #include <vector>
 
 #include "shared/profiler.h"
@@ -54,20 +55,6 @@ double CellImpact(const FastBoard& board, int index) {
     return impact;
 }
 
-std::vector<int> SelectChanceCells(const FastBoard& board, const SearchConfig& config) {
-    auto empties = board.EmptyIndices();
-    if (!config.approximateChanceNodes || config.maxChanceBranchesPerValue <= 0 ||
-        static_cast<int>(empties.size()) <= config.maxChanceBranchesPerValue) {
-        return empties;
-    }
-
-    std::sort(empties.begin(), empties.end(), [&board](int lhs, int rhs) {
-        return CellImpact(board, lhs) > CellImpact(board, rhs);
-    });
-    empties.resize(static_cast<std::size_t>(config.maxChanceBranchesPerValue));
-    return empties;
-}
-
 }  // namespace
 
 std::uint64_t ComposeSearchKey(const FastBoard& board, int depth, NodeType nodeType) {
@@ -76,6 +63,51 @@ std::uint64_t ComposeSearchKey(const FastBoard& board, int depth, NodeType nodeT
     key ^= static_cast<std::uint64_t>(static_cast<std::uint32_t>(depth) * 0xBF58476D1CE4E5B9ULL);
     key ^= nodeType == NodeType::Chance ? 0x94D049BB133111EBULL : 0x369DEA0F31A53F85ULL;
     return key;
+}
+
+std::vector<int> SelectChanceCellsForSearch(const FastBoard& board, const Evaluator& evaluator,
+                                            const SearchConfig& config) {
+    auto empties = board.EmptyIndices();
+    if (!config.approximateChanceNodes || config.maxChanceBranchesPerValue <= 0 ||
+        static_cast<int>(empties.size()) <= config.maxChanceBranchesPerValue) {
+        return empties;
+    }
+
+    struct RankedCell {
+        int index = 0;
+        double value = 0.0;
+    };
+
+    auto spawnValue = [&board, &evaluator](int index) {
+        double expectedValue = 0.0;
+        for (const auto& [rank, probability] : std::array<std::pair<int, double>, 2>{{
+                 {1, 0.9}, {2, 0.1}
+             }}) {
+            FastBoard spawned = board;
+            spawned.SetRank(index, rank);
+            expectedValue += probability * evaluator.Evaluate(spawned);
+        }
+        return expectedValue;
+    };
+
+    std::vector<RankedCell> ranked;
+    ranked.reserve(empties.size());
+    for (int index : empties) {
+        ranked.push_back({index, spawnValue(index)});
+    }
+
+    std::sort(ranked.begin(), ranked.end(), [&board](const RankedCell& lhs, const RankedCell& rhs) {
+        if (lhs.value == rhs.value) {
+            return CellImpact(board, lhs.index) > CellImpact(board, rhs.index);
+        }
+        return lhs.value < rhs.value;
+    });
+
+    for (std::size_t index = 0; index < empties.size(); ++index) {
+        empties[index] = ranked[index].index;
+    }
+    empties.resize(static_cast<std::size_t>(config.maxChanceBranchesPerValue));
+    return empties;
 }
 
 ExpectimaxAgent::ExpectimaxAgent()
@@ -249,7 +281,7 @@ double ExpectimaxAgent::SearchChance(const FastBoard& board, int depth, Clock::t
         return evaluator_.Evaluate(board);
     }
 
-    const auto empties = SelectChanceCells(board, config_);
+    const auto empties = SelectChanceCellsForSearch(board, evaluator_, config_);
     if (depth <= 0 || empties.empty()) {
         ++stats.terminalNodes;
         return evaluator_.Evaluate(board);

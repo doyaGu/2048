@@ -30,6 +30,8 @@ struct EvaluatorWeights {
     double mergePotential = 96.0;
     double snakePattern = 1.15;
     double trapPenalty = 240.0;
+    double mobility = 180.0;
+    double danger = 360.0;
 };
 
 inline constexpr EvaluatorWeights kDefaultEvaluatorWeights {};

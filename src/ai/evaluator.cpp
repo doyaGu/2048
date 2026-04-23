@@ -152,6 +152,39 @@ double ComputeTrapPenalty(const FastBoard& board) {
     return -penalty / 8.0;
 }
 
+int CountValidMoves(const FastBoard& board) {
+    int moves = 0;
+    moves += board.MoveUp().changed ? 1 : 0;
+    moves += board.MoveLeft().changed ? 1 : 0;
+    moves += board.MoveRight().changed ? 1 : 0;
+    moves += board.MoveDown().changed ? 1 : 0;
+    return moves;
+}
+
+double ComputeMobility(const FastBoard& board) {
+    return static_cast<double>(CountValidMoves(board));
+}
+
+double ComputeDanger(const FastBoard& board) {
+    const int empty = board.CountEmpty();
+    const int validMoves = CountValidMoves(board);
+    double penalty = 0.0;
+
+    if (empty < 4) {
+        const int deficit = 4 - empty;
+        penalty += static_cast<double>(deficit * deficit);
+    }
+    if (validMoves < 3) {
+        const int deficit = 3 - validMoves;
+        penalty += static_cast<double>(deficit * deficit);
+    }
+    if (!board.CanMove()) {
+        penalty += 16.0;
+    }
+
+    return -penalty;
+}
+
 }  // namespace
 
 Evaluator::Evaluator(EvaluatorConfig config)
@@ -185,10 +218,16 @@ FeatureBreakdown Evaluator::Breakdown(const FastBoard& board) const {
     if (config_.useTrapPenalty) {
         breakdown.trapPenalty = config_.weights.trapPenalty * ComputeTrapPenalty(board);
     }
+    if (config_.useMobility) {
+        breakdown.mobility = config_.weights.mobility * ComputeMobility(board);
+    }
+    if (config_.useDanger) {
+        breakdown.danger = config_.weights.danger * ComputeDanger(board);
+    }
 
     breakdown.total = breakdown.emptyTiles + breakdown.monotonicity + breakdown.smoothness +
                       breakdown.cornerMax + breakdown.mergePotential + breakdown.snakePattern +
-                      breakdown.trapPenalty;
+                      breakdown.trapPenalty + breakdown.mobility + breakdown.danger;
     return breakdown;
 }
 

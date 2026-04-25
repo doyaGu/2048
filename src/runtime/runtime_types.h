@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <optional>
 
-#include "ai/ai_engine.h"
+#include "search/ai_engine.h"
 #include "core/board.h"
 #include "shared/stats.h"
 

@@ -1,4 +1,4 @@
-#include "../src/app/runtime_event_mapper.h"
+#include "../src/gui/runtime_event_mapper.h"
 #include "test_framework.h"
 
 namespace {
@@ -58,4 +58,3 @@ TEST_CASE(RuntimeEventMapper_Command_ClearsHeldRepeat) {
     frame.heldMove = Direction::Up;
     EXPECT_TRUE(mapper.BuildEvents(frame, OverlayMode::None, 1.2).empty());
 }
-

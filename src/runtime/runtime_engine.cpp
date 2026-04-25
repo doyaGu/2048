@@ -183,7 +183,7 @@ void RuntimeEngine::Reset(std::uint64_t seed) {
     game_.Reset(seed);
     ++boardRevision_;
     lastMove_.reset();
-    submittedRevision_ = static_cast<std::uint64_t>(-1);
+    submittedRevision_ = kNoSubmittedRevision;
     snapshot_.recommendation = {};
     snapshot_.recommendationRevision = 0;
     snapshot_.lastSearch = {};
@@ -284,7 +284,7 @@ void RuntimeEngine::SyncOverlayState() {
 void RuntimeEngine::CycleAgent() {
     config_.agent = NextValue(kAgentCycle, config_.agent);
     workerGeneration_ = worker_.Configure(config_.agent, config_.search);
-    submittedRevision_ = static_cast<std::uint64_t>(-1);
+    submittedRevision_ = kNoSubmittedRevision;
     snapshot_.recommendation = {};
     snapshot_.recommendationRevision = 0;
     snapshot_.lastSearch = {};

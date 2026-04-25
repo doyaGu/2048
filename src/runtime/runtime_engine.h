@@ -1,5 +1,8 @@
 #pragma once
 
+#include <cstdint>
+#include <limits>
+#include <optional>
 #include <vector>
 
 #include "runtime/ai_worker.h"
@@ -16,6 +19,8 @@ public:
     const RuntimeSnapshot& Snapshot() const;
 
 private:
+    static constexpr std::uint64_t kNoSubmittedRevision = std::numeric_limits<std::uint64_t>::max();
+
     void ApplyEvent(const RuntimeEvent& event);
     void ExecuteMove(Direction direction);
     void Reset(std::uint64_t seed);
@@ -34,7 +39,7 @@ private:
     RuntimeSnapshot snapshot_ {};
     std::optional<RuntimeMoveAnimation> lastMove_ {};
     std::uint64_t boardRevision_ = 0;
-    std::uint64_t submittedRevision_ = static_cast<std::uint64_t>(-1);
+    std::uint64_t submittedRevision_ = kNoSubmittedRevision;
     std::uint64_t workerGeneration_ = 0;
     bool quitRequested_ = false;
     bool victoryOverlayShown_ = false;

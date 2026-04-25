@@ -21,7 +21,7 @@ constexpr std::string_view EnumName(const std::array<std::string_view, N>& value
 
 }  // namespace detail
 
-inline constexpr std::array<std::string_view, 3> kAgentNames {{"Human", "Greedy", "Expectimax"}};
+inline constexpr std::array<std::string_view, 4> kAgentNames {{"Human", "Greedy", "Expectimax", "N-tuple"}};
 inline constexpr std::array<std::string_view, 3> kControlModeNames {{"Human", "Auto AI", "AI Step"}};
 inline constexpr std::array<std::string_view, 4> kOverlayModeNames {{"None", "Help", "Victory", "Game Over"}};
 inline constexpr std::array<std::string_view, 3> kInputGateNames {{"Ready", "Overlay", "Animating"}};

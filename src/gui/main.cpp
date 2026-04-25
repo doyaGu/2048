@@ -1,4 +1,4 @@
-#include "app/app.h"
+#include "gui/app.h"
 
 int main(int argc, char** argv) {
     game2048::App app;

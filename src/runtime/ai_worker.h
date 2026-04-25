@@ -7,7 +7,7 @@
 #include <string>
 #include <thread>
 
-#include "ai/ai_engine.h"
+#include "search/ai_engine.h"
 #include "core/board.h"
 #include "core/board_fast.h"
 

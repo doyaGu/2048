@@ -1,6 +1,7 @@
 # Build outputs
 build/
 build*/
+artifacts/
 
 # Visual Studio / IDE files
 .vs/

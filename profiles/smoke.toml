@@ -1,0 +1,67 @@
+[run]
+name = "smoke"
+seed = 700000
+
+[selection]
+metric = "average-score"
+target_tile = 0
+confidence_z = 0.0
+confirm_games = 0
+
+[search]
+agent = "expectimax"
+eval_agent = "expectimax"
+depth = 1
+time_budget_ms = 2
+eval_games = 1
+eval_interval = 1
+final_games = 1
+
+[search.downgrade]
+enabled = true
+steps = 2
+floor_rank = 13
+
+[value]
+preset = "compact-d4"
+optimistic_init = 200000.0
+multistage = true
+stage_boundaries = [11, 12, 13, 14, 15]
+
+[value.storage]
+mode = "dense-stage"
+
+[artifacts]
+dir = "artifacts/profile-smoke"
+
+[matrix]
+seeds = [700000, 700010]
+priors = [0.0]
+
+[[phases]]
+name = "bootstrap"
+games = 2
+learning_mode = "optimistic-td"
+alpha = 0.002
+final_alpha = 0.0005
+epsilon = 0.0
+final_epsilon = 0.0
+
+[[phases]]
+name = "promotion"
+games = 2
+learning_mode = "optimistic-td"
+alpha = 0.001
+final_alpha = 0.00025
+epsilon = 0.0
+final_epsilon = 0.0
+
+[[phases]]
+name = "fine"
+games = 2
+learning_mode = "optimistic-tc"
+alpha = 0.0005
+final_alpha = 0.0001
+epsilon = 0.0
+final_epsilon = 0.0
+prior_weight = 0.0

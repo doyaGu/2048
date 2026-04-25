@@ -1,0 +1,63 @@
+[run]
+name = "ntuple-paper-aligned-smoke"
+seed = 700000
+
+[selection]
+metric = "average-score"
+target_tile = 0
+confidence_z = 1.0
+confirm_games = 1
+
+[search]
+agent = "expectimax"
+eval_agent = "expectimax"
+depth = 1
+time_budget_ms = 5
+eval_depth = 1
+eval_time_budget_ms = 5
+eval_games = 1
+eval_interval = 1
+final_games = 1
+eval_threads = 1
+
+[search.downgrade]
+enabled = true
+mode = "root"
+steps = 1
+floor_rank = 0
+
+[value]
+preset = "tdl-8x6-kmatsuzaki"
+optimistic_init = 320000.0
+multistage = true
+stage_boundaries = [14]
+
+[value.storage]
+mode = "dense-stage"
+
+[artifacts]
+dir = "artifacts/ntuple-paper-aligned-smoke"
+
+[matrix]
+seeds = [700000]
+priors = [0.0]
+
+[[phases]]
+name = "bootstrap"
+games = 2
+learning_mode = "optimistic-td"
+alpha = 0.1
+final_alpha = 0.001
+epsilon = 0.0
+final_epsilon = 0.0
+prior_weight = 0.0
+
+[[phases]]
+name = "fine"
+games = 1
+learning_mode = "optimistic-tc"
+alpha = 1.0
+final_alpha = 1.0
+epsilon = 0.0
+final_epsilon = 0.0
+prior_weight = 0.0

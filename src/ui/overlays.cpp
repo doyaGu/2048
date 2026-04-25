@@ -97,7 +97,7 @@ void DrawOverlayView(const LayoutMetrics& layout, const RuntimeSnapshot& state) 
 
     DrawText("CLI:", static_cast<int>(modal.x + pad), static_cast<int>(y), smallFs, Color{143, 122, 102, 255});
     y += smallLineH;
-    DrawText("bench --games N  |  analyze --seed N", static_cast<int>(modal.x + pad), static_cast<int>(y), smallFs, Color{143, 122, 102, 255});
+    DrawText("microbench --games N  |  inspect --seed N", static_cast<int>(modal.x + pad), static_cast<int>(y), smallFs, Color{143, 122, 102, 255});
     y += smallLineH + 8.0F;
 
     if (state.showContinueHint) {

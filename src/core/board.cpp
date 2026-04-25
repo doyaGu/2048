@@ -24,6 +24,10 @@ std::size_t CellIndex(int row, int col) {
     return rowIndex * static_cast<std::size_t>(kBoardSize) + colIndex;
 }
 
+bool SameCell(CellCoord lhs, CellCoord rhs) {
+    return lhs.row == rhs.row && lhs.col == rhs.col;
+}
+
 LinePositions PositionsForLine(Direction direction, int line) {
     LinePositions positions {};
     for (std::size_t offset = 0; offset < positions.size(); ++offset) {
@@ -96,17 +100,17 @@ MoveResult Board::ApplyMove(Direction direction) {
             const auto& current = tiles[index];
             if (index + 1 < tiles.size() && tiles[index + 1].value == current.value) {
                 const int mergedValue = current.value * 2;
-            const auto destination = positions[writeIndex];
+                const auto destination = positions[writeIndex];
 
                 next[CellIndex(destination.row, destination.col)] = mergedValue;
                 result.scoreDelta += static_cast<std::uint32_t>(mergedValue);
                 result.trace.merges.push_back({destination, mergedValue});
 
                 const auto& other = tiles[index + 1];
-                if (current.from.row != destination.row || current.from.col != destination.col || mergedValue != current.value) {
+                if (!SameCell(current.from, destination) || mergedValue != current.value) {
                     result.trace.moves.push_back({current.from, destination, current.value, true});
                 }
-                if (other.from.row != destination.row || other.from.col != destination.col || mergedValue != other.value) {
+                if (!SameCell(other.from, destination) || mergedValue != other.value) {
                     result.trace.moves.push_back({other.from, destination, other.value, true});
                 }
 
@@ -115,7 +119,7 @@ MoveResult Board::ApplyMove(Direction direction) {
             } else {
                 const auto destination = positions[writeIndex];
                 next[CellIndex(destination.row, destination.col)] = current.value;
-                if (current.from.row != destination.row || current.from.col != destination.col) {
+                if (!SameCell(current.from, destination)) {
                     result.trace.moves.push_back({current.from, destination, current.value, false});
                 }
                 ++writeIndex;

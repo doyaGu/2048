@@ -32,6 +32,9 @@ struct EvaluatorWeights {
     double trapPenalty = 240.0;
     double mobility = 180.0;
     double danger = 360.0;
+    double chainContinuity = 85.0;
+    double endgameProgress = 150.0;
+    double patternTable = 1.0;
 };
 
 inline constexpr EvaluatorWeights kDefaultEvaluatorWeights {};

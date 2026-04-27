@@ -2,6 +2,7 @@
 #include "../src/search/expectimax.h"
 #include "../src/training/benchmark.h"
 #include "../src/value/ntuple.h"
+#include "../src/value/tdl_compat.h"
 #include "../src/value/ntuple_kernel.h"
 #include "../src/search/transposition_table.h"
 #include "../src/core/board.h"
@@ -34,9 +35,11 @@ using game2048::ai::NtupleAgent;
 using game2048::ai::NtupleNetwork;
 using game2048::ai::NtuplePattern;
 using game2048::ai::NtuplePreset;
+using game2048::ai::NtupleTraceStep;
 using game2048::ai::NtupleTrainingOptions;
 using game2048::ai::NtupleTrainingRates;
 using game2048::ai::NtupleTrainer;
+using game2048::ai::NtupleUpdateOrder;
 using game2048::ai::PatternsForPreset;
 using game2048::ai::PatternSetForPreset;
 using game2048::ai::SearchConfig;
@@ -156,6 +159,113 @@ TEST_CASE(NtuplePreset_FixedPath_Matches_GenericPath) {
     generic.UpdateToward(board, 100.0, 0.5);
 
     EXPECT_NEAR(fixed.Evaluate(board), generic.Evaluate(board), 1e-9);
+}
+
+TEST_CASE(NtuplePreset_Tdl8x6_FeatureKeys_Match_TDL2048_Order) {
+    NtupleNetwork network(PatternSetForPreset(NtuplePreset::Tdl8x6KMatsuzaki));
+    const FastBoard board = FastBoard::FromReference(
+        MakeBoard({{{2, 4, 8, 16}, {32, 64, 128, 256}, {512, 1024, 2048, 4096}, {0, 0, 0, 0}}}));
+
+    const auto keys = network.FeatureKeysForBoard(board);
+
+    EXPECT_EQ(keys.size(), std::size_t {64});
+    EXPECT_EQ(keys[0], std::size_t {0x765321});
+    EXPECT_EQ(keys[8], std::size_t {(1u << 24U) + 0xA98765});
+    EXPECT_EQ(keys[16], std::size_t {(2u << 24U) + 0x654321});
+    EXPECT_EQ(keys[24], std::size_t {(3u << 24U) + 0xA76543});
+    EXPECT_EQ(keys[32], std::size_t {(4u << 24U) + 0xBA6321});
+    EXPECT_EQ(keys[40], std::size_t {(5u << 24U) + 0x987654});
+    EXPECT_EQ(keys[48], std::size_t {(6u << 24U) + 0x876542});
+    EXPECT_EQ(keys[56], std::size_t {(7u << 24U) + 0xBA9521});
+}
+
+TEST_CASE(TdlRandom_InitAndSpawn_MatchReferenceSequence) {
+    game2048::ai::TdlRandom rng(700000U);
+
+    game2048::FastBoard board = rng.InitBoard();
+    EXPECT_EQ(board.Bits(), 0x210000000ULL);
+
+    const auto firstSpawn = rng.SpawnNext(board);
+    EXPECT_TRUE(firstSpawn);
+    EXPECT_EQ(board.Bits(), 0x1000210000000ULL);
+
+    const auto secondSpawn = rng.SpawnNext(board);
+    EXPECT_TRUE(secondSpawn);
+    EXPECT_EQ(board.Bits(), 0x1000211000000ULL);
+}
+
+TEST_CASE(TdlBestMove_TieBreaksUpRightDownLeft) {
+    using game2048::ai::NtupleNetwork;
+    using game2048::ai::NtuplePreset;
+    using game2048::ai::PatternSetForPreset;
+
+    NtupleNetwork network(PatternSetForPreset(NtuplePreset::Tdl8x6KMatsuzaki));
+    game2048::FastBoard board;
+    board.SetRank(5, 1);
+
+    const auto candidate = game2048::ai::ChooseTdlBestMove(board, network);
+
+    EXPECT_TRUE(candidate.valid);
+    EXPECT_EQ(candidate.direction, game2048::Direction::Up);
+}
+
+TEST_CASE(ExpectimaxLeafNetwork_UsesAfterstateRewards_InRecursiveMaxNodes) {
+    NtupleNetwork network(PatternSetForPreset(NtuplePreset::CompactD4));
+    SearchConfig config;
+    config.maxDepth = 1;
+    config.timeBudgetMs = 0;
+    config.iterativeDeepening = false;
+    config.approximateChanceNodes = false;
+    config.maxChanceBranchesPerValue = 16;
+    config.useTranspositionTable = false;
+
+    ExpectimaxAgent agent;
+    agent.SetConfig(config);
+    agent.SetLeafNetwork(network);
+    agent.SetLeafPriorWeight(0.0);
+
+    FastBoard board;
+    board.SetRank(2, 1);
+    board.SetRank(4, 1);
+
+    const auto decision = agent.ChooseMove(board);
+
+    EXPECT_TRUE(decision.valid);
+    EXPECT_EQ(decision.direction, game2048::Direction::Right);
+}
+
+TEST_CASE(ExpectimaxLeafNetwork_TieBreaks_With_TDL_Move_Order) {
+    NtupleNetwork network(PatternSetForPreset(NtuplePreset::CompactD4));
+    SearchConfig config;
+    config.maxDepth = 0;
+    config.timeBudgetMs = 0;
+    config.iterativeDeepening = false;
+    config.useTranspositionTable = false;
+
+    ExpectimaxAgent agent;
+    agent.SetConfig(config);
+    agent.SetLeafNetwork(network);
+    agent.SetLeafPriorWeight(0.0);
+
+    FastBoard board;
+    board.SetRank(0, 1);
+    board.SetRank(3, 1);
+
+    const auto decision = agent.ChooseMove(board);
+
+    EXPECT_TRUE(decision.valid);
+    EXPECT_EQ(decision.direction, game2048::Direction::Right);
+}
+
+TEST_CASE(TdlForwardTraining_UsesOptimisticValueScale) {
+    using game2048::ai::NtupleNetwork;
+    using game2048::ai::NtuplePreset;
+    using game2048::ai::PatternSetForPreset;
+
+    NtupleNetwork network(PatternSetForPreset(NtuplePreset::Tdl8x6KMatsuzaki), 320000.0F);
+    game2048::FastBoard board(0x210000000ULL);
+
+    EXPECT_NEAR(network.Evaluate(board), 320000.0, 1.0);
 }
 
 TEST_CASE(NtupleNetwork_Multistage_Uses_Dense_StageCopies) {
@@ -402,6 +512,7 @@ TEST_CASE(NtupleNetwork_FastUpdate_Matches_RegularUpdate) {
     const auto fastStats = fast.UpdateTowardFast(board, 250.0, 0.25, LearningMode::TD);
 
     EXPECT_NEAR(fastStats.before, regularStats.before, 1e-9);
+    EXPECT_NEAR(fastStats.after, fast.Evaluate(board), 1e-9);
     EXPECT_NEAR(fastStats.error, regularStats.error, 1e-9);
     EXPECT_NEAR(fast.Evaluate(board), regular.Evaluate(board), 1e-9);
 }
@@ -413,9 +524,10 @@ TEST_CASE(NtupleNetwork_FastUpdate_Matches_RegularUpdate_With_DuplicateKeys) {
     NtupleNetwork fast(PatternSetForPreset(NtuplePreset::Tdl4x6Khyeh));
 
     regular.UpdateToward(board, 125.0, 0.10, LearningMode::TD);
-    fast.UpdateTowardFast(board, 125.0, 0.10, LearningMode::TD);
+    const auto fastStats = fast.UpdateTowardFast(board, 125.0, 0.10, LearningMode::TD);
 
     EXPECT_NEAR(fast.Evaluate(board), regular.Evaluate(board), 1e-9);
+    EXPECT_NEAR(fastStats.after, fast.Evaluate(board), 1e-9);
 }
 
 TEST_CASE(NtupleFixed6Kernel_DispatchMatchesScalar) {
@@ -582,6 +694,49 @@ TEST_CASE(NtupleTrainer_Can_Disable_ExpectedSpawnTarget) {
 
     options.useExpectedSpawnTarget = true;
     EXPECT_TRUE(options.useExpectedSpawnTarget);
+}
+
+TEST_CASE(NtupleTrainer_BackwardTrace_Uses_NextReward_And_TerminalZeroTarget) {
+    NtupleNetwork network({NtuplePattern{{0}}});
+    FastBoard first;
+    first.SetRank(0, 1);
+    FastBoard second;
+    second.SetRank(0, 2);
+
+    const auto stats = ApplyBackwardAfterstateTrace(network, {
+        NtupleTraceStep {first, 8},
+        NtupleTraceStep {second, 16},
+    }, 1.0, LearningMode::TD);
+
+    EXPECT_EQ(stats.updates, std::size_t {2});
+    EXPECT_NEAR(network.Evaluate(second), 0.0, 1e-9);
+    EXPECT_NEAR(network.Evaluate(first), 16.0, 1e-9);
+}
+
+TEST_CASE(NtupleTrainer_ReplayStart_Trains_HighStage_From_Real_Buffer) {
+    NtupleNetwork network(PatternSetForPreset(NtuplePreset::Tdl8x6KMatsuzaki), 0.0F, {14});
+    FastBoard replay;
+    replay.SetRank(0, 14);
+    replay.SetRank(1, 13);
+    replay.SetRank(2, 12);
+
+    NtupleTrainer trainer(network);
+    trainer.AddReplayStart(replay);
+
+    NtupleTrainingOptions options;
+    options.games = 1;
+    options.seed = 19;
+    options.maxMovesPerGame = 4;
+    options.alpha = 0.01;
+    options.finalAlpha = 0.01;
+    options.updateOrder = NtupleUpdateOrder::Backward;
+    options.replayStartRank = 14;
+    const auto stats = trainer.Train(options);
+
+    EXPECT_TRUE(stats.maxTile >= 16384);
+    EXPECT_TRUE(stats.stageUpdates.size() > 1);
+    EXPECT_TRUE(stats.stageUpdates[1] > 0);
+    EXPECT_EQ(stats.replayStarts, std::size_t {1});
 }
 
 TEST_CASE(NtupleTrainingRates_Linearly_Anneal_Per_Game) {

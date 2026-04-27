@@ -29,6 +29,11 @@ enum class LearningMode {
     OptimisticTC,
 };
 
+enum class NtupleUpdateOrder {
+    Online,
+    Backward,
+};
+
 enum class SelectionMetric {
     AverageScore,
     TileRate,
@@ -63,6 +68,7 @@ public:
                            std::vector<int> stageBoundaries = {});
 
     double Evaluate(const FastBoard& board) const;
+    std::vector<std::size_t> FeatureKeysForBoard(const FastBoard& board) const;
     NtupleUpdateStats UpdateToward(const FastBoard& board, double target, double alpha);
     NtupleUpdateStats UpdateToward(const FastBoard& board, double target, double alpha, LearningMode mode);
     NtupleUpdateStats UpdateTowardFast(const FastBoard& board, double target, double alpha, LearningMode mode);
@@ -89,8 +95,8 @@ private:
     std::size_t StageForRead(std::size_t stage) const;
     void BuildFixedPathCache();
     double EvaluateFixedPath(std::size_t stage, const FastBoard& board) const;
-    void ApplyCollectedWeightDeltas(std::size_t stage, const std::vector<std::size_t>& keys,
-                                    double delta, LearningMode mode);
+    void ApplyCollectedWeightDeltas(std::size_t stage, const std::size_t* keys,
+                                    std::size_t keyCount, double delta, LearningMode mode);
     void ApplyWeightDelta(std::size_t stage, std::size_t weightIndex, double delta, LearningMode mode);
     void EnsureStage(std::size_t stage);
     void EnsureTcStage(std::size_t stage);
@@ -112,7 +118,6 @@ private:
     std::vector<bool> promotedStages_;
     std::vector<std::uint8_t> fixedShifts6_;
     std::vector<std::size_t> fixedOffsets_;
-    std::vector<std::size_t> fixedKeyScratch_;
     std::string profileMetadata_;
     std::size_t entriesPerStage_ = 0;
 };
@@ -136,6 +141,10 @@ struct NtupleTrainingOptions {
     bool useMultistage = false;
     std::vector<int> stageBoundaries {};
     int expectedTargetEmptyThreshold = 0;
+    int startRank = 0;
+    int replayStartRank = 0;
+    int replayCaptureRank = 0;
+    NtupleUpdateOrder updateOrder = NtupleUpdateOrder::Online;
     SelectionMetric selectionMetric = SelectionMetric::AverageScore;
     int selectionTargetTile = 0;
 };
@@ -155,11 +164,30 @@ struct NtupleTrainingStats {
     double rmsTdError = 0.0;
     double maxAbsTdError = 0.0;
     std::size_t tcTouchedEntries = 0;
+    std::size_t replayStarts = 0;
+    std::size_t replayCaptured = 0;
     std::vector<std::size_t> stageUpdates {};
+};
+
+struct NtupleTraceStep {
+    NtupleTraceStep() = default;
+    NtupleTraceStep(const FastBoard& board, std::uint32_t rewardDelta)
+        : afterstateBits(board.Bits()), reward(rewardDelta) {}
+    NtupleTraceStep(std::uint64_t boardBits, std::uint32_t rewardDelta)
+        : afterstateBits(boardBits), reward(rewardDelta) {}
+
+    FastBoard Afterstate() const { return FastBoard(afterstateBits); }
+
+    std::uint64_t afterstateBits = 0;
+    std::uint32_t reward = 0;
 };
 
 NtupleTrainingRate NtupleTrainingRates(const NtupleTrainingOptions& options, std::size_t gameIndex);
 double TrainingSelectionValue(const BenchmarkSummary& summary, SelectionMetric metric, int targetTile);
+NtupleTrainingStats ApplyBackwardAfterstateTrace(NtupleNetwork& network,
+                                                 const std::vector<NtupleTraceStep>& trace,
+                                                 double alpha,
+                                                 LearningMode mode);
 NtuplePatternSet PatternSetForPreset(NtuplePreset preset);
 std::vector<NtuplePattern> PatternsForPreset(NtuplePreset preset);
 std::vector<int> DefaultStageBoundaries();
@@ -169,6 +197,8 @@ public:
     explicit NtupleTrainer(NtupleNetwork& network);
 
     NtupleTrainingStats Train(const NtupleTrainingOptions& options);
+    void AddReplayStart(const FastBoard& board);
+    std::size_t ReplayStartCount() const;
 
 private:
     struct CandidateMove {
@@ -177,8 +207,10 @@ private:
     };
 
     CandidateMove ChooseMove(const FastBoard& board, Random& rng, double explorationRate, double priorWeight) const;
+    FastBoard InitialBoardForGame(const NtupleTrainingOptions& options, Random& rng, bool& usedReplay) const;
 
     NtupleNetwork& network_;
+    std::vector<FastBoard> replayStarts_;
 };
 
 class NtupleAgent {

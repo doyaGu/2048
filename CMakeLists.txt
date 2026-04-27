@@ -75,6 +75,7 @@ game2048_configure_target(game2048_core)
 add_library(game2048_value
     src/value/ntuple_kernel.cpp
     src/value/ntuple.cpp
+    src/value/tdl_compat.cpp
     src/search/evaluator.cpp
     src/search/greedy.cpp
 )

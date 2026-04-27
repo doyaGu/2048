@@ -36,7 +36,7 @@ struct RankedCell {
 };
 
 constexpr std::array<Direction, 4> kDirections {
-    Direction::Up, Direction::Left, Direction::Right, Direction::Down
+    Direction::Up, Direction::Right, Direction::Down, Direction::Left
 };
 
 FastMoveResult ApplyMove(const FastBoard& board, Direction direction) {
@@ -363,7 +363,8 @@ MoveDecision ExpectimaxAgent::ChooseMove(const FastBoard& board) {
             }
 
             const CandidateMove& candidate = candidates.items[candidateIndex];
-            double value = SearchChance(FastBoard(candidate.move.board), depth, deadline, iterationStats);
+            double value = static_cast<double>(candidate.move.scoreDelta) +
+                           SearchChance(FastBoard(candidate.move.board), depth, deadline, iterationStats);
             if (aborted_) {
                 break;
             }
@@ -473,10 +474,10 @@ double ExpectimaxAgent::SearchMax(const FastBoard& board, int depth, Clock::time
         return LeafEvaluate(board);
     }
 
-    if (depth <= 0 || !board.CanMove()) {
+    if (!board.CanMove()) {
         ++stats.terminalNodes;
         ++stats.leafEvals;
-        return LeafEvaluate(board);
+        return useLeafNetwork_ ? 0.0 : LeafEvaluate(board);
     }
 
     if (config_.useTranspositionTable) {
@@ -502,7 +503,10 @@ double ExpectimaxAgent::SearchMax(const FastBoard& board, int depth, Clock::time
 
     for (std::size_t candidateIndex = 0; candidateIndex < candidates.count; ++candidateIndex) {
         const CandidateMove& candidate = candidates.items[candidateIndex];
-        const double value = SearchChance(FastBoard(candidate.move.board), depth, deadline, stats);
+        const double value = static_cast<double>(candidate.move.scoreDelta) +
+                             (depth <= 0
+                                  ? LeafEvaluate(FastBoard(candidate.move.board))
+                                  : SearchChance(FastBoard(candidate.move.board), depth, deadline, stats));
         if (aborted_) {
             return best;
         }

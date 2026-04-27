@@ -5,6 +5,7 @@
 #include <cmath>
 #include <fstream>
 #include <limits>
+#include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <string_view>
@@ -223,6 +224,82 @@ bool UsesTc(LearningMode mode) {
     return mode == LearningMode::TC || mode == LearningMode::OptimisticTC;
 }
 
+NtupleTrainingStats ApplyBackwardAfterstateTraceInternal(NtupleNetwork& network,
+                                                         const std::vector<NtupleTraceStep>& trace,
+                                                         double alpha,
+                                                         LearningMode mode,
+                                                         double priorWeight) {
+    NtupleTrainingStats stats;
+    stats.games = trace.empty() ? 0U : 1U;
+    stats.moves = trace.size();
+    stats.stageUpdates.assign(std::max<std::size_t>(1, network.StageCount()), 0);
+    std::optional<Evaluator> evaluator;
+    if (priorWeight != 0.0) {
+        evaluator.emplace();
+    }
+
+    double absErrorSum = 0.0;
+    double squaredErrorSum = 0.0;
+    double nextValue = 0.0;
+    double nextReward = 0.0;
+    for (auto it = trace.rbegin(); it != trace.rend(); ++it) {
+        const FastBoard afterstate = it->Afterstate();
+        const double target = nextReward + nextValue;
+        const double residualTarget = priorWeight == 0.0
+            ? target
+            : target - priorWeight * evaluator->Evaluate(afterstate);
+        const std::size_t stage = network.StageFor(afterstate);
+        if (stage >= stats.stageUpdates.size()) {
+            stats.stageUpdates.resize(stage + 1U, 0);
+        }
+        const NtupleUpdateStats update = network.UpdateTowardFast(afterstate, residualTarget, alpha, mode);
+        const double absError = std::abs(update.error);
+        absErrorSum += absError;
+        squaredErrorSum += update.error * update.error;
+        stats.maxAbsTdError = std::max(stats.maxAbsTdError, absError);
+        ++stats.stageUpdates[stage];
+        ++stats.updates;
+        stats.totalScore += it->reward;
+        stats.maxTile = std::max(stats.maxTile, afterstate.MaxTile());
+
+        nextValue = priorWeight == 0.0
+            ? update.after
+            : update.after + priorWeight * evaluator->Evaluate(afterstate);
+        nextReward = static_cast<double>(it->reward);
+    }
+
+    if (stats.updates > 0) {
+        stats.meanAbsTdError = absErrorSum / static_cast<double>(stats.updates);
+        stats.rmsTdError = std::sqrt(squaredErrorSum / static_cast<double>(stats.updates));
+    }
+    stats.tcTouchedEntries = network.TouchedTcEntries();
+    return stats;
+}
+
+FastBoard MakeStageStartBoard(int startRank, Random& rng) {
+    FastBoard board;
+    if (startRank <= 0) {
+        rng.SpawnOnFastBoard(board);
+        rng.SpawnOnFastBoard(board);
+        return board;
+    }
+
+    static constexpr std::array<int, 12> kSnakeCells {
+        0, 1, 2, 3,
+        7, 6, 5, 4,
+        8, 9, 10, 11,
+    };
+    const int filled = std::min<int>(static_cast<int>(kSnakeCells.size()), startRank);
+    for (int index = 0; index < filled; ++index) {
+        board.SetRank(kSnakeCells[static_cast<std::size_t>(index)], std::max(1, startRank - index));
+    }
+    const int transform = static_cast<int>(rng.NextIndex(8));
+    board = board.TransformD4(transform);
+    rng.SpawnOnFastBoard(board);
+    rng.SpawnOnFastBoard(board);
+    return board;
+}
+
 std::size_t EffectiveFeatureCount(const NtuplePatternSet& patternSet) {
     const std::size_t transforms = patternSet.useD4 ? 8U : 1U;
     return std::max<std::size_t>(1, patternSet.basePatterns.size() * transforms);
@@ -376,14 +453,29 @@ double NtupleNetwork::Evaluate(const FastBoard& board) const {
     return value;
 }
 
+std::vector<std::size_t> NtupleNetwork::FeatureKeysForBoard(const FastBoard& board) const {
+    std::vector<std::size_t> keys;
+    keys.reserve(patterns_.size() * (patternSet_.useD4 ? 8U : 1U));
+    for (std::size_t index = 0; index < patterns_.size(); ++index) {
+        if (patternSet_.useD4) {
+            for (int transform = 0; transform < 8; ++transform) {
+                const FastBoard transformed = board.TransformD4(transform);
+                keys.push_back(patternOffsets_[index] + KeyFor(transformed, patterns_[index]));
+            }
+        } else {
+            keys.push_back(patternOffsets_[index] + KeyFor(board, patterns_[index]));
+        }
+    }
+    return keys;
+}
+
 NtupleUpdateStats NtupleNetwork::UpdateToward(const FastBoard& board, double target, double alpha) {
     return UpdateToward(board, target, alpha, LearningMode::TD);
 }
 
 NtupleUpdateStats NtupleNetwork::UpdateToward(const FastBoard& board, double target, double alpha,
                                              LearningMode mode) {
-    const auto stats = UpdateTowardFast(board, target, alpha, mode);
-    return {stats.before, Evaluate(board), stats.error};
+    return UpdateTowardFast(board, target, alpha, mode);
 }
 
 NtupleUpdateStats NtupleNetwork::UpdateTowardFast(const FastBoard& board, double target, double alpha,
@@ -399,20 +491,23 @@ NtupleUpdateStats NtupleNetwork::UpdateTowardFast(const FastBoard& board, double
 
     const std::size_t accessCount = patterns_.size() * (patternSet_.useD4 ? 8U : 1U);
     if (patternSet_.useFixedPath && !fixedShifts6_.empty()) {
-        fixedKeyScratch_.resize(accessCount);
+        std::array<std::size_t, 128> fixedKeys {};
         const std::size_t keyCount = ntuple_kernel::CollectFixed6Keys(board.Bits(), fixedOffsets_.data(),
                                                                       fixedShifts6_.data(), fixedOffsets_.size(),
-                                                                      fixedKeyScratch_.data());
-        fixedKeyScratch_.resize(keyCount);
+                                                                      fixedKeys.data());
         const auto& weights = stageValues_[stage];
         double before = 0.0;
-        for (std::size_t key : fixedKeyScratch_) {
-            before += weights[key];
+        for (std::size_t index = 0; index < keyCount; ++index) {
+            before += weights[fixedKeys[index]];
         }
         const double error = target - before;
         const double delta = alpha * error / static_cast<double>(keyCount);
-        ApplyCollectedWeightDeltas(stage, fixedKeyScratch_, delta, mode);
-        return {before, 0.0, error};
+        ApplyCollectedWeightDeltas(stage, fixedKeys.data(), keyCount, delta, mode);
+        double after = 0.0;
+        for (std::size_t index = 0; index < keyCount; ++index) {
+            after += weights[fixedKeys[index]];
+        }
+        return {before, after, error};
     }
 
     const double before = Evaluate(board);
@@ -426,7 +521,7 @@ NtupleUpdateStats NtupleNetwork::UpdateTowardFast(const FastBoard& board, double
             ApplyWeightDelta(stage, weightIndex, delta, mode);
         }
     }
-    return {before, 0.0, error};
+    return {before, Evaluate(board), error};
 }
 
 void NtupleNetwork::Save(const std::string& path) const {
@@ -762,7 +857,6 @@ std::size_t NtupleNetwork::KeyFor(const FastBoard& board, const NtuplePattern& p
 void NtupleNetwork::BuildFixedPathCache() {
     fixedShifts6_.clear();
     fixedOffsets_.clear();
-    fixedKeyScratch_.clear();
     if (!patternSet_.useFixedPath) {
         return;
     }
@@ -775,14 +869,12 @@ void NtupleNetwork::BuildFixedPathCache() {
             patternSet_.useFixedPath = false;
             fixedShifts6_.clear();
             fixedOffsets_.clear();
-            fixedKeyScratch_.clear();
             return;
         }
     }
 
     fixedOffsets_ = patternOffsets_;
     fixedShifts6_.resize(patterns_.size() * ntuple_kernel::kFixed6Transforms * ntuple_kernel::kFixed6Cells);
-    fixedKeyScratch_.reserve(patterns_.size() * ntuple_kernel::kFixed6Transforms);
     for (std::size_t patternIndex = 0; patternIndex < patterns_.size(); ++patternIndex) {
         for (std::size_t transform = 0; transform < ntuple_kernel::kFixed6Transforms; ++transform) {
             for (std::size_t cellIndex = 0; cellIndex < ntuple_kernel::kFixed6Cells; ++cellIndex) {
@@ -802,18 +894,20 @@ double NtupleNetwork::EvaluateFixedPath(std::size_t stage, const FastBoard& boar
                                          fixedOffsets_.size());
 }
 
-void NtupleNetwork::ApplyCollectedWeightDeltas(std::size_t stage, const std::vector<std::size_t>& keys,
-                                               double delta, LearningMode mode) {
+void NtupleNetwork::ApplyCollectedWeightDeltas(std::size_t stage, const std::size_t* keys,
+                                               std::size_t keyCount, double delta, LearningMode mode) {
     auto& weights = stageValues_[stage];
     if (!UsesTc(mode)) {
-        for (std::size_t key : keys) {
+        for (std::size_t index = 0; index < keyCount; ++index) {
+            const std::size_t key = keys[index];
             weights[key] = static_cast<float>(static_cast<double>(weights[key]) + delta);
         }
         return;
     }
     EnsureTcStage(stage);
     auto& tcStage = tc_[stage];
-    for (std::size_t key : keys) {
+    for (std::size_t index = 0; index < keyCount; ++index) {
+        const std::size_t key = keys[index];
         auto [entry, inserted] = tcStage.try_emplace(key, TcEntry {kTcInitial, kTcInitial});
         TcEntry& tc = entry->second;
         const double adjustedDelta = delta * (std::abs(static_cast<double>(tc.accum)) /
@@ -918,64 +1012,120 @@ double TrainingSelectionValue(const BenchmarkSummary& summary, SelectionMetric m
     return found == summary.achievementRates.end() ? 0.0 : found->second;
 }
 
+NtupleTrainingStats ApplyBackwardAfterstateTrace(NtupleNetwork& network,
+                                                 const std::vector<NtupleTraceStep>& trace,
+                                                 double alpha,
+                                                 LearningMode mode) {
+    return ApplyBackwardAfterstateTraceInternal(network, trace, alpha, mode, 0.0);
+}
+
 NtupleTrainingStats NtupleTrainer::Train(const NtupleTrainingOptions& options) {
     NtupleTrainingStats stats;
     stats.games = options.games;
     stats.stageUpdates.assign(std::max<std::size_t>(1, network_.StageCount()), 0);
     double absErrorSum = 0.0;
     double squaredErrorSum = 0.0;
+    std::vector<NtupleTraceStep> trace;
+    trace.reserve(4096);
 
     for (std::size_t gameIndex = 0; gameIndex < options.games; ++gameIndex) {
         Random rng(options.seed + gameIndex);
         const bool usePrior = options.priorWeight != 0.0;
         Evaluator evaluator;
         const NtupleTrainingRate rates = NtupleTrainingRates(options, gameIndex);
-        FastBoard board;
-        rng.SpawnOnFastBoard(board);
-        rng.SpawnOnFastBoard(board);
+        bool usedReplay = false;
+        FastBoard board = InitialBoardForGame(options, rng, usedReplay);
+        if (usedReplay) {
+            ++stats.replayStarts;
+        }
 
         std::size_t movesThisGame = 0;
-        while (board.CanMove() &&
-               (options.maxMovesPerGame == 0 || movesThisGame < options.maxMovesPerGame)) {
-            const CandidateMove candidate = ChooseMove(board, rng, rates.explorationRate, options.priorWeight);
-            if (!candidate.valid) {
-                break;
+        bool capturedReplayThisGame = false;
+        auto captureReplay = [&]() {
+            if (options.replayCaptureRank > 0 && !capturedReplayThisGame &&
+                board.MaxRank() >= options.replayCaptureRank) {
+                replayStarts_.push_back(board);
+                capturedReplayThisGame = true;
+                ++stats.replayCaptured;
             }
+        };
+        captureReplay();
 
-            const FastBoard afterMove(candidate.move.board);
-            const bool useExpected = options.useExpectedSpawnTarget &&
-                                     (options.expectedTargetEmptyThreshold <= 0 ||
-                                      afterMove.CountEmpty() <= options.expectedTargetEmptyThreshold);
-            const double nextValue = useExpected
-                                         ? ExpectedSpawnTarget(afterMove, network_, evaluator, options.priorWeight)
-                                         : 0.0;
-            board = afterMove;
-            rng.SpawnOnFastBoard(board);
+        if (options.updateOrder == NtupleUpdateOrder::Backward) {
+            trace.clear();
+            while (board.CanMove() &&
+                   (options.maxMovesPerGame == 0 || movesThisGame < options.maxMovesPerGame)) {
+                const CandidateMove candidate = ChooseMove(board, rng, rates.explorationRate, options.priorWeight);
+                if (!candidate.valid) {
+                    break;
+                }
 
-            const double sampledNextValue = useExpected
-                                                ? nextValue
-                                                : BestMoveValueAfterSpawn(board, network_, evaluator,
-                                                                          options.priorWeight);
-            const double target = options.discount * sampledNextValue;
-            const double residualTarget = usePrior
-                                              ? target - options.priorWeight * evaluator.Evaluate(afterMove)
-                                              : target;
-            const std::size_t updateStage = network_.StageFor(afterMove);
-            if (updateStage >= stats.stageUpdates.size()) {
-                stats.stageUpdates.resize(updateStage + 1U, 0);
+                trace.emplace_back(candidate.move.board, candidate.move.scoreDelta);
+                board = FastBoard(candidate.move.board);
+                rng.SpawnOnFastBoard(board);
+                captureReplay();
+                ++movesThisGame;
             }
-            const NtupleUpdateStats updateStats =
-                network_.UpdateTowardFast(afterMove, residualTarget, rates.alpha, options.learningMode);
-            const double absError = std::abs(updateStats.error);
-            absErrorSum += absError;
-            squaredErrorSum += updateStats.error * updateStats.error;
-            stats.maxAbsTdError = std::max(stats.maxAbsTdError, absError);
-            ++stats.stageUpdates[updateStage];
+            const NtupleTrainingStats traceStats =
+                ApplyBackwardAfterstateTraceInternal(network_, trace, rates.alpha, options.learningMode,
+                                                     options.priorWeight);
+            stats.moves += traceStats.moves;
+            stats.updates += traceStats.updates;
+            stats.totalScore += traceStats.totalScore;
+            stats.maxAbsTdError = std::max(stats.maxAbsTdError, traceStats.maxAbsTdError);
+            absErrorSum += traceStats.meanAbsTdError * static_cast<double>(traceStats.updates);
+            squaredErrorSum += traceStats.rmsTdError * traceStats.rmsTdError *
+                               static_cast<double>(traceStats.updates);
+            if (stats.stageUpdates.size() < traceStats.stageUpdates.size()) {
+                stats.stageUpdates.resize(traceStats.stageUpdates.size(), 0);
+            }
+            for (std::size_t index = 0; index < traceStats.stageUpdates.size(); ++index) {
+                stats.stageUpdates[index] += traceStats.stageUpdates[index];
+            }
+        } else {
+            while (board.CanMove() &&
+                   (options.maxMovesPerGame == 0 || movesThisGame < options.maxMovesPerGame)) {
+                const CandidateMove candidate = ChooseMove(board, rng, rates.explorationRate, options.priorWeight);
+                if (!candidate.valid) {
+                    break;
+                }
 
-            ++movesThisGame;
-            ++stats.moves;
-            ++stats.updates;
-            stats.totalScore += candidate.move.scoreDelta;
+                const FastBoard afterMove(candidate.move.board);
+                const bool useExpected = options.useExpectedSpawnTarget &&
+                                         (options.expectedTargetEmptyThreshold <= 0 ||
+                                          afterMove.CountEmpty() <= options.expectedTargetEmptyThreshold);
+                const double nextValue = useExpected
+                                             ? ExpectedSpawnTarget(afterMove, network_, evaluator, options.priorWeight)
+                                             : 0.0;
+                board = afterMove;
+                rng.SpawnOnFastBoard(board);
+                captureReplay();
+
+                const double sampledNextValue = useExpected
+                                                    ? nextValue
+                                                    : BestMoveValueAfterSpawn(board, network_, evaluator,
+                                                                              options.priorWeight);
+                const double target = options.discount * sampledNextValue;
+                const double residualTarget = usePrior
+                                                  ? target - options.priorWeight * evaluator.Evaluate(afterMove)
+                                                  : target;
+                const std::size_t updateStage = network_.StageFor(afterMove);
+                if (updateStage >= stats.stageUpdates.size()) {
+                    stats.stageUpdates.resize(updateStage + 1U, 0);
+                }
+                const NtupleUpdateStats updateStats =
+                    network_.UpdateTowardFast(afterMove, residualTarget, rates.alpha, options.learningMode);
+                const double absError = std::abs(updateStats.error);
+                absErrorSum += absError;
+                squaredErrorSum += updateStats.error * updateStats.error;
+                stats.maxAbsTdError = std::max(stats.maxAbsTdError, absError);
+                ++stats.stageUpdates[updateStage];
+
+                ++movesThisGame;
+                ++stats.moves;
+                ++stats.updates;
+                stats.totalScore += candidate.move.scoreDelta;
+            }
         }
 
         stats.maxTile = std::max(stats.maxTile, board.MaxTile());
@@ -987,6 +1137,42 @@ NtupleTrainingStats NtupleTrainer::Train(const NtupleTrainingOptions& options) {
     stats.tcTouchedEntries = network_.TouchedTcEntries();
 
     return stats;
+}
+
+void NtupleTrainer::AddReplayStart(const FastBoard& board) {
+    replayStarts_.push_back(board);
+}
+
+std::size_t NtupleTrainer::ReplayStartCount() const {
+    return replayStarts_.size();
+}
+
+FastBoard NtupleTrainer::InitialBoardForGame(const NtupleTrainingOptions& options, Random& rng,
+                                             bool& usedReplay) const {
+    usedReplay = false;
+    if (options.replayStartRank > 0 && !replayStarts_.empty()) {
+        std::size_t eligible = 0;
+        for (const FastBoard& board : replayStarts_) {
+            if (board.MaxRank() >= options.replayStartRank) {
+                ++eligible;
+            }
+        }
+        if (eligible > 0) {
+            const std::size_t selected = rng.NextIndex(eligible);
+            std::size_t seen = 0;
+            for (const FastBoard& board : replayStarts_) {
+                if (board.MaxRank() < options.replayStartRank) {
+                    continue;
+                }
+                if (seen == selected) {
+                    usedReplay = true;
+                    return board;
+                }
+                ++seen;
+            }
+        }
+    }
+    return MakeStageStartBoard(options.startRank, rng);
 }
 
 NtupleTrainer::CandidateMove NtupleTrainer::ChooseMove(const FastBoard& board, Random& rng,
@@ -1013,13 +1199,18 @@ NtupleTrainer::CandidateMove NtupleTrainer::ChooseMove(const FastBoard& board, R
         return legalMoves[rng.NextIndex(legalCount)];
     }
 
-    Evaluator evaluator;
     double bestValue = -std::numeric_limits<double>::infinity();
     std::size_t bestIndex = 0;
+    std::optional<Evaluator> evaluator;
+    if (priorWeight != 0.0) {
+        evaluator.emplace();
+    }
     for (std::size_t index = 0; index < legalCount; ++index) {
         const FastBoard afterMove(legalMoves[index].move.board);
-        const double value = static_cast<double>(legalMoves[index].move.scoreDelta) +
-                             CombinedAfterstateValue(afterMove, network_, evaluator, priorWeight);
+        double value = static_cast<double>(legalMoves[index].move.scoreDelta) + network_.Evaluate(afterMove);
+        if (priorWeight != 0.0) {
+            value += priorWeight * evaluator->Evaluate(afterMove);
+        }
         if (index == 0 || value > bestValue) {
             bestValue = value;
             bestIndex = index;

@@ -1,8 +1,10 @@
 #include <chrono>
 #include <array>
+#include <memory>
 #include <thread>
 
 #include "../src/runtime/runtime_engine.h"
+#include "../src/value/ntuple.h"
 #include "test_framework.h"
 
 namespace {
@@ -102,6 +104,19 @@ TEST_CASE(RuntimeEngine_OverlayAndAutoplay_AreInSnapshot) {
     snapshot = runtime.Tick({}, 0.4);
     EXPECT_EQ(snapshot.overlayMode, OverlayMode::None);
     EXPECT_EQ(snapshot.controlMode, ControlMode::AIAutoplay);
+}
+
+TEST_CASE(RuntimeEngine_Snapshot_ExposesConfiguredTrainedModel) {
+    RuntimeConfig config = FastConfig(12);
+    config.ntupleNetwork = std::make_shared<game2048::ai::NtupleNetwork>(
+        std::vector<game2048::ai::NtuplePattern> {game2048::ai::NtuplePattern {{0, 1, 2, 3}}});
+    config.modelLabel = "best.weights";
+
+    RuntimeEngine runtime(config);
+    const auto snapshot = runtime.Tick({}, 0.0);
+
+    EXPECT_TRUE(snapshot.hasTrainedModel);
+    EXPECT_EQ(snapshot.modelLabel, std::string("best.weights"));
 }
 
 TEST_CASE(RuntimeEngine_InputGate_TracksAnimationBlocking) {
@@ -266,4 +281,41 @@ TEST_CASE(AIWorker_BusyAndPoll_PreserveCompletedResultsUntilConsumed) {
     }
 
     EXPECT_FALSE(worker.Busy());
+}
+
+TEST_CASE(AIWorker_UsesConfiguredNtupleLeafNetwork) {
+    game2048::AIWorker worker;
+
+    game2048::ai::SearchConfig search;
+    search.maxDepth = 0;
+    search.timeBudgetMs = 0;
+    search.iterativeDeepening = false;
+    search.useTranspositionTable = false;
+
+    auto network = std::make_shared<game2048::ai::NtupleNetwork>(
+        std::vector<game2048::ai::NtuplePattern> {game2048::ai::NtuplePattern {{0, 1, 2, 3}}});
+    const game2048::Board board = game2048::Board::FromRows({{
+        {{0, 0, 2, 4}},
+        {{0, 0, 0, 0}},
+        {{0, 0, 0, 0}},
+        {{0, 0, 0, 0}},
+    }});
+    const game2048::FastBoard afterLeft(game2048::FastBoard::FromReference(board).MoveLeft().board);
+    network->UpdateToward(afterLeft, 1000.0, 1.0);
+
+    const auto generation = worker.Configure(game2048::ai::AgentKind::Expectimax, search, network);
+    worker.Submit(board, 7);
+
+    auto result = worker.Poll();
+    for (int attempt = 0; attempt < 50 && !result.has_value(); ++attempt) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        result = worker.Poll();
+    }
+
+    EXPECT_TRUE(result.has_value());
+    if (result.has_value()) {
+        EXPECT_EQ(result->generation, generation);
+        EXPECT_TRUE(result->decision.valid);
+        EXPECT_EQ(result->decision.direction, game2048::Direction::Left);
+    }
 }

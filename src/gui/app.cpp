@@ -2,8 +2,10 @@
 
 #include <cstdint>
 #include <exception>
+#include <filesystem>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <vector>
 
 #include <raylib.h>
@@ -29,6 +31,10 @@ RuntimeConfig ToRuntimeConfig(const CliOptions& options) {
     config.seed = options.seed;
     config.agent = options.agent;
     config.search = options.search;
+    if (options.weightPath.has_value()) {
+        config.ntupleNetwork = std::make_shared<ai::NtupleNetwork>(ai::NtupleNetwork::Load(*options.weightPath));
+        config.modelLabel = std::filesystem::path(*options.weightPath).filename().string();
+    }
     return config;
 }
 

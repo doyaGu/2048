@@ -1,7 +1,9 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <optional>
+#include <string>
 
 #include "search/ai_engine.h"
 #include "core/board.h"
@@ -63,6 +65,8 @@ struct RuntimeConfig {
     std::uint64_t seed = kDefaultSeed;
     ai::AgentKind agent = ai::AgentKind::Expectimax;
     ai::SearchConfig search {};
+    std::shared_ptr<const ai::NtupleNetwork> ntupleNetwork {};
+    std::string modelLabel {};
     std::optional<Board> initialBoard {};
 };
 
@@ -93,6 +97,8 @@ struct RuntimeSnapshot {
     AnimationSpeed animationSpeed = AnimationSpeed::Normal;
 
     ai::AgentKind agent = ai::AgentKind::Expectimax;
+    bool hasTrainedModel = false;
+    std::string modelLabel {};
     AIStatus aiStatus = AIStatus::Idle;
     ai::MoveDecision recommendation {};
     std::uint64_t recommendationRevision = 0;

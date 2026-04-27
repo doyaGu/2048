@@ -42,7 +42,7 @@ RuntimeEngine::RuntimeEngine(RuntimeConfig config)
         snapshot.seed = config_.seed;
         game_.Restore(snapshot);
     }
-    workerGeneration_ = worker_.Configure(config_.agent, config_.search);
+    workerGeneration_ = worker_.Configure(config_.agent, config_.search, config_.ntupleNetwork);
     RefreshSnapshot();
     SyncOverlayState();
     RefreshSnapshot();
@@ -241,6 +241,8 @@ void RuntimeEngine::RefreshSnapshot() {
     snapshot_.boardRevision = boardRevision_;
     snapshot_.quitRequested = quitRequested_;
     snapshot_.agent = config_.agent;
+    snapshot_.hasTrainedModel = static_cast<bool>(config_.ntupleNetwork);
+    snapshot_.modelLabel = config_.modelLabel;
     snapshot_.showContinueHint = victoryOverlayShown_ && snapshot_.overlayMode != OverlayMode::GameOver;
     snapshot_.canDismissOverlay = snapshot_.overlayMode == OverlayMode::Help || snapshot_.overlayMode == OverlayMode::Victory;
     snapshot_.evaluatorBreakdown = ai::Evaluator().Breakdown(FastBoard::FromReference(game_.GetBoard()));
@@ -283,7 +285,7 @@ void RuntimeEngine::SyncOverlayState() {
 
 void RuntimeEngine::CycleAgent() {
     config_.agent = NextValue(kAgentCycle, config_.agent);
-    workerGeneration_ = worker_.Configure(config_.agent, config_.search);
+    workerGeneration_ = worker_.Configure(config_.agent, config_.search, config_.ntupleNetwork);
     submittedRevision_ = kNoSubmittedRevision;
     snapshot_.recommendation = {};
     snapshot_.recommendationRevision = 0;

@@ -92,8 +92,9 @@ CliOptions ParseCliOptions(int argc, char** argv) {
             }
             options.microbenchGames = static_cast<std::size_t>(std::stoull(requireValue("--games")));
         } else if (arg == "--weights") {
-            if (options.command != CliCommand::Bench && options.command != CliCommand::Inspect) {
-                throw std::runtime_error("--weights is only valid for bench or inspect");
+            if (options.command != CliCommand::Play && options.command != CliCommand::Bench &&
+                options.command != CliCommand::Inspect) {
+                throw std::runtime_error("--weights is only valid for play, bench, or inspect");
             }
             options.weightPath = requireValue("--weights");
         } else if (arg == "--max-jobs") {

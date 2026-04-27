@@ -39,6 +39,19 @@ TEST_CASE(CliOptions_PlaySubcommand_ParsesAiAndSearch) {
     EXPECT_EQ(options.search.timeBudgetMs, 5);
 }
 
+TEST_CASE(CliOptions_PlaySubcommand_AllowsWeights) {
+    char arg0[] = "game2048";
+    char arg1[] = "play";
+    char arg2[] = "--weights";
+    char arg3[] = "artifacts/best.weights";
+    char* argv[] = {arg0, arg1, arg2, arg3};
+
+    const auto options = ParseCliOptions(4, argv);
+
+    EXPECT_EQ(options.command, game2048::CliCommand::Play);
+    EXPECT_EQ(*options.weightPath, std::string("artifacts/best.weights"));
+}
+
 TEST_CASE(CliOptions_TrainSubcommand_ParsesProfileOnly) {
     char arg0[] = "game2048";
     char arg1[] = "train";

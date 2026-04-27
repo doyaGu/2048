@@ -20,12 +20,14 @@ AIWorker::~AIWorker() {
     }
 }
 
-std::uint64_t AIWorker::Configure(ai::AgentKind agent, const ai::SearchConfig& search) {
+std::uint64_t AIWorker::Configure(ai::AgentKind agent, const ai::SearchConfig& search,
+                                  std::shared_ptr<const ai::NtupleNetwork> ntupleNetwork) {
     std::uint64_t generation = 0;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         agent_ = agent;
         search_ = search;
+        ntupleNetwork_ = std::move(ntupleNetwork);
         ++generation_;
         generation = generation_;
         pending_.reset();
@@ -38,7 +40,7 @@ std::uint64_t AIWorker::Configure(ai::AgentKind agent, const ai::SearchConfig& s
 void AIWorker::Submit(const Board& board, std::uint64_t revision) {
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        pending_ = Request {FastBoard::FromReference(board), revision, generation_, agent_, search_};
+        pending_ = Request {FastBoard::FromReference(board), revision, generation_, agent_, search_, ntupleNetwork_};
     }
     cv_.notify_one();
 }
@@ -85,6 +87,14 @@ void AIWorker::Run() {
             ai::AIEngine engine;
             engine.SetAgent(request.agent);
             engine.Expectimax().SetConfig(request.search);
+            if (request.ntupleNetwork) {
+                if (request.agent == ai::AgentKind::Expectimax) {
+                    engine.Expectimax().SetLeafNetworkShared(request.ntupleNetwork);
+                    engine.Expectimax().SetLeafPriorWeight(0.0);
+                } else if (request.agent == ai::AgentKind::Ntuple) {
+                    engine.Ntuple().SetNetworkShared(request.ntupleNetwork);
+                }
+            }
             result.decision = engine.Recommend(request.board);
         } catch (const std::exception& ex) {
             result.failed = true;

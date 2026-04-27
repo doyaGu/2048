@@ -40,9 +40,11 @@ void DrawPanelsView(const LayoutMetrics& layout, const RuntimeSnapshot& state) {
     float y = layout.panelRect.y + std::max(8.0F, 12.0F * style.scale);
 
     DrawSectionHeader(layout.panelRect, y, "Status", style);
-    const std::array<std::pair<const char*, std::string>, 8> statusLines {{
+    const std::array<std::pair<const char*, std::string>, 10> statusLines {{
         {"Mode", std::string(ControlModeName(state.controlMode))},
         {"AI", std::string(AgentName(state.agent))},
+        {"Model", state.hasTrainedModel ? std::string("trained") : std::string("heuristic")},
+        {"Weights", state.hasTrainedModel ? (state.modelLabel.empty() ? std::string("loaded") : state.modelLabel) : std::string("-")},
         {"State", std::string(AIStatusName(state.aiStatus))},
         {"Gate", std::string(InputGateName(state.inputGate))},
         {"Anim", std::string(AnimationSpeedName(state.animationSpeed))},

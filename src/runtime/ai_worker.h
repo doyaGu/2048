@@ -2,6 +2,7 @@
 
 #include <condition_variable>
 #include <cstdint>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -29,7 +30,8 @@ public:
     AIWorker(const AIWorker&) = delete;
     AIWorker& operator=(const AIWorker&) = delete;
 
-    std::uint64_t Configure(ai::AgentKind agent, const ai::SearchConfig& search);
+    std::uint64_t Configure(ai::AgentKind agent, const ai::SearchConfig& search,
+                            std::shared_ptr<const ai::NtupleNetwork> ntupleNetwork = {});
     void Submit(const Board& board, std::uint64_t revision);
     std::optional<AIWorkerResult> Poll();
     bool Busy() const;
@@ -41,6 +43,7 @@ private:
         std::uint64_t generation = 0;
         ai::AgentKind agent = ai::AgentKind::Expectimax;
         ai::SearchConfig search {};
+        std::shared_ptr<const ai::NtupleNetwork> ntupleNetwork {};
     };
 
     void Run();
@@ -52,6 +55,7 @@ private:
     std::uint64_t generation_ = 0;
     ai::AgentKind agent_ = ai::AgentKind::Expectimax;
     ai::SearchConfig search_ {};
+    std::shared_ptr<const ai::NtupleNetwork> ntupleNetwork_ {};
     std::optional<Request> pending_ {};
     std::optional<AIWorkerResult> completed_ {};
     std::thread thread_;

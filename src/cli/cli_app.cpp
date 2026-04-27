@@ -72,6 +72,10 @@ ai::SearchConfig SearchConfigForProfile(const experiment::ExperimentProfile& pro
     ai::SearchConfig config;
     config.maxDepth = profile.search.depth;
     config.timeBudgetMs = profile.search.timeBudgetMs;
+    if (profile.search.fixedPly) {
+        config.iterativeDeepening = false;
+        config.timeBudgetMs = 0;
+    }
     config.useTileDowngrading = profile.search.downgrade.enabled &&
         profile.search.downgrade.mode == experiment::SearchProfileConfig::DowngradeMode::Leaf;
     config.useRootTileDowngrading = profile.search.downgrade.enabled &&
@@ -134,6 +138,9 @@ int RunMicrobench(const CliOptions& options) {
         training.finalExplorationRate = profile.phases.front().finalEpsilon;
         training.priorWeight = profile.phases.front().priorWeight;
         training.learningMode = profile.phases.front().learningMode;
+        training.updateOrder = profile.phases.front().updateOrder;
+        training.replayStartRank = profile.phases.front().replayStartRank;
+        training.replayCaptureRank = profile.phases.front().replayCaptureRank;
     }
 
     ai::NtupleTrainer trainer(network);
@@ -177,6 +184,11 @@ int RunCliCommand(const CliOptions& options) {
     }
     if (options.command == CliCommand::Microbench) {
         return RunMicrobench(options);
+    }
+    if (options.command == CliCommand::Parity) {
+        const auto profile = experiment::LoadExperimentProfile(*options.profilePath);
+        const auto result = experiment::RunParityProfile(profile, options.tdlBinPath.value_or(""));
+        return result.passed ? 0 : 3;
     }
     std::cerr << "play is only available in the GUI executable\n";
     return 1;

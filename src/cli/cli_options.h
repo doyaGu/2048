@@ -17,6 +17,7 @@ enum class CliCommand {
     Train,
     Matrix,
     Microbench,
+    Parity,
 };
 
 struct CliOptions {
@@ -26,6 +27,7 @@ struct CliOptions {
     ai::SearchConfig search {};
     std::optional<std::string> profilePath;
     std::optional<std::string> weightPath;
+    std::optional<std::string> tdlBinPath;
     std::optional<std::string> boardRows;
     int maxJobs = 1;
     std::size_t microbenchGames = 200;

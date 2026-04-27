@@ -1,0 +1,25 @@
+[run]
+name = "tdl-parity"
+seed = 700000
+
+[value]
+preset = "tdl-8x6-kmatsuzaki"
+optimistic_init = 320000.0
+multistage = false
+
+[trainer]
+mode = "tdl-forward-td"
+games = 1000000
+progress_interval_games = 50000
+alpha = 0.1
+learning_mode = "td"
+checkpoints = [20000, 100000, 300000, 1000000]
+
+[eval]
+mode = "tdl-best"
+games = 1000
+parity_tolerance = 0.15
+reference_cache = "artifacts/tdl-reference-cache.csv"
+
+[artifacts]
+dir = "artifacts/tdl-parity"

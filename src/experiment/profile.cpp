@@ -273,6 +273,15 @@ std::vector<std::uint64_t> ReadU64Array(const std::unordered_map<std::string, To
     return values;
 }
 
+std::vector<std::size_t> ReadSizeArray(const std::unordered_map<std::string, TomlValue>& table,
+                                       const std::string& key) {
+    std::vector<std::size_t> values;
+    for (std::uint64_t value : ReadU64Array(table, key)) {
+        values.push_back(static_cast<std::size_t>(value));
+    }
+    return values;
+}
+
 std::vector<double> ReadDoubleArray(const std::unordered_map<std::string, TomlValue>& table,
                                     const std::string& key) {
     std::vector<double> values;
@@ -340,6 +349,16 @@ ai::LearningMode ParseLearningMode(const std::string& value) {
     throw std::runtime_error("unknown learning mode: " + value);
 }
 
+ai::NtupleUpdateOrder ParseUpdateOrder(const std::string& value) {
+    if (value == "online") {
+        return ai::NtupleUpdateOrder::Online;
+    }
+    if (value == "backward") {
+        return ai::NtupleUpdateOrder::Backward;
+    }
+    throw std::runtime_error("unknown update order: " + value);
+}
+
 training::SelectionMetric ParseSelectionMetric(const std::string& value) {
     if (value == "average-score") {
         return training::SelectionMetric::AverageScore;
@@ -394,8 +413,11 @@ ExperimentProfile ParseExperimentProfileText(const std::string& text) {
     profile.search.timeBudgetMs = ReadInt(search, "time_budget_ms", profile.search.timeBudgetMs);
     profile.search.evalDepth = ReadInt(search, "eval_depth", profile.search.evalDepth);
     profile.search.evalTimeBudgetMs = ReadInt(search, "eval_time_budget_ms", profile.search.evalTimeBudgetMs);
+    profile.search.fixedPly = ReadBool(search, "fixed_ply", profile.search.fixedPly);
     profile.search.evalGames = ReadSize(search, "eval_games", profile.search.evalGames);
     profile.search.evalInterval = ReadSize(search, "eval_interval", profile.search.evalInterval);
+    profile.search.progressIntervalGames = ReadSize(search, "progress_interval_games",
+                                                    profile.search.progressIntervalGames);
     profile.search.finalGames = ReadSize(search, "final_games", profile.search.finalGames);
     profile.search.evalThreads = ReadSize(search, "eval_threads", profile.search.evalThreads);
     const auto& downgrade = Table(doc, "search.downgrade");
@@ -415,6 +437,21 @@ ExperimentProfile ParseExperimentProfileText(const std::string& text) {
         throw std::runtime_error("unsupported value.storage.mode: " + profile.value.storageMode);
     }
 
+    const auto& trainer = Table(doc, "trainer");
+    profile.trainer.mode = ReadString(trainer, "mode", profile.trainer.mode);
+    profile.trainer.games = ReadSize(trainer, "games", profile.trainer.games);
+    profile.trainer.progressIntervalGames = ReadSize(trainer, "progress_interval_games",
+                                                     profile.trainer.progressIntervalGames);
+    profile.trainer.alpha = ReadDouble(trainer, "alpha", profile.trainer.alpha);
+    profile.trainer.learningMode = ParseLearningMode(ReadString(trainer, "learning_mode", "td"));
+    profile.trainer.checkpoints = ReadSizeArray(trainer, "checkpoints");
+
+    const auto& eval = Table(doc, "eval");
+    profile.eval.mode = ReadString(eval, "mode", profile.eval.mode);
+    profile.eval.games = ReadSize(eval, "games", profile.eval.games);
+    profile.eval.parityTolerance = ReadDouble(eval, "parity_tolerance", profile.eval.parityTolerance);
+    profile.eval.referenceCachePath = ReadString(eval, "reference_cache", profile.eval.referenceCachePath);
+
     const auto& artifacts = Table(doc, "artifacts");
     profile.artifacts.dir = ReadString(artifacts, "dir", profile.artifacts.dir);
 
@@ -432,9 +469,14 @@ ExperimentProfile ParseExperimentProfileText(const std::string& text) {
         phase.epsilon = ReadDouble(phaseTable, "epsilon", phase.epsilon);
         phase.finalEpsilon = ReadDouble(phaseTable, "final_epsilon", phase.epsilon);
         phase.priorWeight = ReadDouble(phaseTable, "prior_weight", phase.priorWeight);
+        phase.startRank = ReadInt(phaseTable, "start_rank", phase.startRank);
+        phase.replayStartRank = ReadInt(phaseTable, "replay_start_rank", phase.replayStartRank);
+        phase.replayCaptureRank = ReadInt(phaseTable, "replay_capture_rank", phase.replayCaptureRank);
+        phase.updateOrder = ParseUpdateOrder(ReadString(phaseTable, "update_order", "online"));
+        phase.enableMultistage = ReadBool(phaseTable, "enable_multistage", phase.enableMultistage);
         profile.phases.push_back(phase);
     }
-    if (profile.phases.empty()) {
+    if (profile.phases.empty() && profile.trainer.mode.empty()) {
         throw std::runtime_error("profile must contain at least one [[phases]] entry");
     }
     return profile;

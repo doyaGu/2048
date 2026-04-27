@@ -100,6 +100,22 @@ TEST_CASE(CliOptions_MicrobenchSubcommand_ParsesProfileAndGames) {
     EXPECT_EQ(options.microbenchGames, std::size_t {200});
 }
 
+TEST_CASE(CliOptions_ParitySubcommand_ParsesProfileAndTdlBin) {
+    char arg0[] = "game2048";
+    char arg1[] = "parity";
+    char arg2[] = "--profile";
+    char arg3[] = "profiles/tdl_parity_smoke.toml";
+    char arg4[] = "--tdl-bin";
+    char arg5[] = "../TDL2048/2048";
+    char* argv[] = {arg0, arg1, arg2, arg3, arg4, arg5};
+
+    const auto options = ParseCliOptions(6, argv);
+
+    EXPECT_EQ(options.command, game2048::CliCommand::Parity);
+    EXPECT_EQ(*options.profilePath, std::string("profiles/tdl_parity_smoke.toml"));
+    EXPECT_EQ(*options.tdlBinPath, std::string("../TDL2048/2048"));
+}
+
 TEST_CASE(CliOptions_TrainSubcommand_RejectsLegacyLongArguments) {
     char arg0[] = "game2048";
     char arg1[] = "train";

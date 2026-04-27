@@ -35,9 +35,11 @@ struct SearchProfileConfig {
     int timeBudgetMs = kDefaultExpectimaxTimeBudgetMs;
     int evalDepth = 0;
     int evalTimeBudgetMs = 0;
+    bool fixedPly = false;
     DowngradeConfig downgrade {};
     std::size_t evalGames = 0;
     std::size_t evalInterval = 0;
+    std::size_t progressIntervalGames = 0;
     std::size_t finalGames = kDefaultBenchmarkGames;
     std::size_t evalThreads = 1;
 };
@@ -59,6 +61,11 @@ struct TrainingPhaseConfig {
     double epsilon = 0.0;
     double finalEpsilon = 0.0;
     double priorWeight = 0.0;
+    int startRank = 0;
+    int replayStartRank = 0;
+    int replayCaptureRank = 0;
+    ai::NtupleUpdateOrder updateOrder = ai::NtupleUpdateOrder::Online;
+    bool enableMultistage = false;
 };
 
 struct MatrixConfig {
@@ -70,11 +77,29 @@ struct ArtifactConfig {
     std::string dir = "artifacts/experiment";
 };
 
+struct TrainerProfileConfig {
+    std::string mode {};
+    std::size_t games = 0;
+    std::size_t progressIntervalGames = 0;
+    double alpha = 0.1;
+    ai::LearningMode learningMode = ai::LearningMode::TD;
+    std::vector<std::size_t> checkpoints {};
+};
+
+struct EvalProfileConfig {
+    std::string mode {};
+    std::size_t games = 0;
+    double parityTolerance = 0.15;
+    std::string referenceCachePath {};
+};
+
 struct ExperimentProfile {
     RunConfig run {};
     training::SelectionPolicy selection {};
     SearchProfileConfig search {};
     ValueProfileConfig value {};
+    TrainerProfileConfig trainer {};
+    EvalProfileConfig eval {};
     MatrixConfig matrix {};
     ArtifactConfig artifacts {};
     std::vector<TrainingPhaseConfig> phases {};

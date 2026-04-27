@@ -38,6 +38,9 @@ CliCommand ParseCommand(const std::string& arg) {
     if (arg == "microbench") {
         return CliCommand::Microbench;
     }
+    if (arg == "parity") {
+        return CliCommand::Parity;
+    }
     if (arg == "analyze") {
         throw std::runtime_error("legacy analyze command is no longer supported; use inspect");
     }
@@ -55,7 +58,7 @@ CliOptions ParseCliOptions(int argc, char** argv) {
     if (index < argc) {
         const std::string first = argv[index];
         if (first == "play" || first == "bench" || first == "inspect" || first == "train" ||
-            first == "matrix" || first == "microbench" || first == "analyze" ||
+            first == "matrix" || first == "microbench" || first == "parity" || first == "analyze" ||
             (!first.empty() && first[0] != '-')) {
             options.command = ParseCommand(first);
             ++index;
@@ -74,10 +77,15 @@ CliOptions ParseCliOptions(int argc, char** argv) {
         if (arg == "--profile") {
             if (options.command != CliCommand::Train && options.command != CliCommand::Bench &&
                 options.command != CliCommand::Matrix && options.command != CliCommand::Inspect &&
-                options.command != CliCommand::Microbench) {
-                throw std::runtime_error("--profile is only valid for train, bench, matrix, inspect, or microbench");
+                options.command != CliCommand::Microbench && options.command != CliCommand::Parity) {
+                throw std::runtime_error("--profile is only valid for train, bench, matrix, inspect, microbench, or parity");
             }
             options.profilePath = requireValue("--profile");
+        } else if (arg == "--tdl-bin") {
+            if (options.command != CliCommand::Parity) {
+                throw std::runtime_error("--tdl-bin is only valid for parity");
+            }
+            options.tdlBinPath = requireValue("--tdl-bin");
         } else if (arg == "--games") {
             if (options.command != CliCommand::Microbench) {
                 throw std::runtime_error("--games is only valid for microbench");
@@ -124,7 +132,8 @@ CliOptions ParseCliOptions(int argc, char** argv) {
     }
 
     if ((options.command == CliCommand::Train || options.command == CliCommand::Bench ||
-         options.command == CliCommand::Matrix || options.command == CliCommand::Microbench) &&
+         options.command == CliCommand::Matrix || options.command == CliCommand::Microbench ||
+         options.command == CliCommand::Parity) &&
         !options.profilePath.has_value()) {
         throw std::runtime_error("command requires --profile PATH");
     }

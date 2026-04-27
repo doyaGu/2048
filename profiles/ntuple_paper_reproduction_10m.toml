@@ -1,0 +1,93 @@
+[run]
+name = "ntuple-paper-reproduction-10m"
+seed = 700000
+
+[selection]
+metric = "average-score"
+target_tile = 0
+confidence_z = 0.0
+confirm_games = 0
+
+[search]
+agent = "expectimax"
+eval_agent = "expectimax"
+depth = 1
+time_budget_ms = 0
+fixed_ply = true
+eval_depth = 1
+eval_time_budget_ms = 0
+eval_games = 1000
+eval_interval = 100000
+progress_interval_games = 100000
+final_games = 1000
+eval_threads = 4
+
+[search.downgrade]
+enabled = false
+mode = "root"
+steps = 1
+floor_rank = 0
+
+[value]
+preset = "tdl-8x6-kmatsuzaki"
+optimistic_init = 320000.0
+multistage = false
+stage_boundaries = [14]
+
+[value.storage]
+mode = "dense-stage"
+
+[artifacts]
+dir = "artifacts/ntuple-paper-reproduction-10m"
+
+[matrix]
+seeds = [700000]
+priors = [0.0]
+
+[[phases]]
+name = "stage0-otd-0p1"
+games = 4500000
+learning_mode = "optimistic-td"
+update_order = "backward"
+alpha = 0.1
+final_alpha = 0.1
+epsilon = 0.0
+final_epsilon = 0.0
+prior_weight = 0.0
+replay_capture_rank = 14
+
+[[phases]]
+name = "stage0-otd-0p01"
+games = 2250000
+learning_mode = "optimistic-td"
+update_order = "backward"
+alpha = 0.01
+final_alpha = 0.01
+epsilon = 0.0
+final_epsilon = 0.0
+prior_weight = 0.0
+replay_capture_rank = 14
+
+[[phases]]
+name = "stage0-otd-0p001"
+games = 2250000
+learning_mode = "optimistic-td"
+update_order = "backward"
+alpha = 0.001
+final_alpha = 0.001
+epsilon = 0.0
+final_epsilon = 0.0
+prior_weight = 0.0
+replay_capture_rank = 14
+
+[[phases]]
+name = "stage0-tc"
+games = 1000000
+learning_mode = "optimistic-tc"
+update_order = "backward"
+alpha = 1.0
+final_alpha = 1.0
+epsilon = 0.0
+final_epsilon = 0.0
+prior_weight = 0.0
+replay_capture_rank = 14

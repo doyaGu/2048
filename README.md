@@ -1,20 +1,20 @@
 # 2048 AI Lab
 
-A C++17 + raylib + CMake implementation of 2048 as a board-centered AI laboratory. The deterministic game core remains isolated, AI search runs through a search/benchmark stack, and interactive play is coordinated by a pure C++ event/snapshot runtime.
+A C++17 + raylib + CMake implementation of 2048 as a board-centered AI laboratory. The deterministic game core remains isolated, AI search runs through a search/benchmark/training stack, and interactive play is coordinated by a pure C++ event/snapshot runtime.
 
 - A deterministic game core with reference and fast board representations
-- A search-oriented AI / benchmark stack centered on expectimax
+- A search-oriented AI / benchmark / n-tuple training stack centered on expectimax
 - A runtime layer that consumes events and emits immutable snapshots
 - A raylib frontend that renders the Board-Centered AI Lab
 
-Benchmark and analyze modes run headless and never depend on the render loop.
+Training, benchmark, matrix sweep, and inspect modes are available through a raylib-free headless CLI for Linux servers.
 
 ## Features
 
 - Standard 4x4 2048 rules with correct merge semantics
 - Deterministic seeding for tests, AI experiments, and benchmarks
 - Reference board for readability and debugging
-- 64-bit fast board with precomputed 16-bit row transition tables
+- 64-bit fast board plus 80-bit packed board support for high-rank AI evaluation
 - Human play, greedy AI, expectimax AI
 - Iterative deepening, time-budget search, move ordering, transposition table
 - Benchmark mode with summary stats and optional CSV export
@@ -32,30 +32,42 @@ game2048/
   CMakeLists.txt
   README.md
   src/
-    main.cpp
     shared/
       profiler.h
       stats.h / stats.cpp
-    ai/
-      ai_engine.h / ai_engine.cpp
-      benchmark.h / benchmark.cpp
-      evaluator.h / evaluator.cpp
-      expectimax.h / expectimax.cpp
-      greedy.h / greedy.cpp
-      transposition_table.h / transposition_table.cpp
-    app/
-      app.h / app.cpp
-      cli_options.h / cli_options.cpp
-    runtime/
-      ai_worker.h / ai_worker.cpp
-      runtime_engine.h / runtime_engine.cpp
-      runtime_types.h
     core/
       board.h / board.cpp
       board_fast.h / board_fast.cpp
       config.h
       game.h / game.cpp
       rng.h / rng.cpp
+    value/
+      ntuple.h / ntuple.cpp
+      ntuple_kernel.h / ntuple_kernel.cpp
+    search/
+      ai_engine.h / ai_engine.cpp
+      evaluator.h / evaluator.cpp
+      expectimax.h / expectimax.cpp
+      greedy.h / greedy.cpp
+      transposition_table.h / transposition_table.cpp
+    training/
+      benchmark.h / benchmark.cpp
+      selection.h / selection.cpp
+    experiment/
+      profile.h / profile.cpp
+      runner.h / runner.cpp
+    cli/
+      cli_app.h / cli_app.cpp
+      cli_options.h / cli_options.cpp
+      main_cli.cpp
+    gui/
+      app.h / app.cpp
+      main.cpp
+      runtime_event_mapper.h / runtime_event_mapper.cpp
+    runtime/
+      ai_worker.h / ai_worker.cpp
+      runtime_engine.h / runtime_engine.cpp
+      runtime_types.h
     input/
       gamepad_input.h / gamepad_input.cpp
       input.h / input.cpp
@@ -74,10 +86,17 @@ game2048/
       theme.h
       ui.h / ui.cpp
       widgets.h / widgets.cpp
+  profiles/
+    smoke.toml
+    ntuple_server.toml
   tests/
     test_framework.h
     test_main.cpp
+    test_app_cli.cpp
+    test_cli_options.cpp
+    test_experiment_profile.cpp
     test_runtime_engine.cpp
+    test_runtime_event_mapper.cpp
     test_moves.cpp
     test_board_equivalence.cpp
     test_eval.cpp
@@ -93,7 +112,7 @@ The build uses `find_package(raylib)`.
 
 ```bash
 cmake -S . -B build
-cmake --build build --target game2048
+cmake --build build --target game2048_gui
 cmake --build build --target game2048_tests
 ```
 
@@ -107,33 +126,75 @@ Example:
 
 ```bash
 cmake -S . -B build -Draylib_ROOT=/path/to/raylib
-cmake --build build --target game2048
+cmake --build build --target game2048_gui
 ```
+
+### Headless Server Build
+
+Training and batch evaluation do not require raylib, X11, or a GUI session. Build only the server CLI target:
+
+```bash
+cmake -S . -B build-server -DGAME2048_BUILD_GUI=OFF -DCMAKE_BUILD_TYPE=Release
+cmake --build build-server --target game2048_cli
+```
+
+For a machine-specific optimized binary, add `-DGAME2048_NATIVE_OPT=ON`. This enables native CPU flags such as `-march=native` in Release builds.
 
 ## Run
 
 Interactive mode:
 
 ```bash
-./build/game2048
-./build/game2048 play --seed 123
-./build/game2048 play --ai greedy --depth 2 --time-budget-ms 5
+./build/game2048_gui
+./build/game2048_gui play --seed 123
+./build/game2048_gui play --ai greedy --depth 2 --time-budget-ms 5
 ```
 
-Benchmark mode:
+Headless train and bench:
 
 ```bash
-./build/game2048 bench --games 100
-./build/game2048 bench --games 200 --seed 123 --ai expectimax --time-budget-ms 10
-./build/game2048 bench --games 200 --ai greedy --csv out.csv
+./build-server/game2048_cli train --profile profiles/smoke.toml
+./build-server/game2048_cli bench --profile profiles/smoke.toml --weights artifacts/profile-smoke/best.weights
+./build-server/game2048_cli matrix --profile profiles/smoke.toml --max-jobs 2
+./build-server/game2048_cli microbench --profile profiles/smoke.toml --games 200
 ```
 
-Analyze mode:
+Server pipeline and concurrent matrix:
 
 ```bash
-./build/game2048 analyze --seed 123 --ai expectimax
-./build/game2048 analyze --board "2,0,0,0/0,4,0,0/0,0,8,0/0,0,0,16" --ai greedy
+SMOKE=1 scripts/train_ntuple_pipeline.sh
+MAX_JOBS=4 PROFILE=profiles/ntuple_server.toml scripts/server_train_matrix.sh
 ```
+
+Training is profile-driven. Each run writes `config.toml`, `manifest.json`, `train.log`, `bench.txt`, `metrics.csv`, `phase-*.weights`, and `best.weights` under the profile artifact directory. Matrix runs summarize jobs in `summary.csv` and copy the selected global best to `best/best.weights`.
+
+Profiles use the current V5 training schema. The relevant AI sections look like:
+
+```toml
+[search.downgrade]
+enabled = true
+steps = 2
+floor_rank = 13
+
+[value]
+preset = "compact-d4" # or "tdl-4x6-khyeh", "tdl-8x6-kmatsuzaki"
+optimistic_init = 200000.0
+multistage = true
+stage_boundaries = [11, 12, 13, 14, 15]
+
+[value.storage]
+mode = "dense-stage"
+```
+
+Weight files use the V5 `G2048NT5` chunked format and are not compatible with older V4 files.
+
+Inspect mode:
+
+```bash
+./build-server/game2048_cli inspect --board "2,0,0,0/0,4,0,0/0,0,8,0/0,0,0,16"
+```
+
+`inspect --board` expects four slash-separated rows with four comma-separated integer tile values per row. Invalid cells report the row and column that failed to parse.
 
 ## Controls
 
@@ -164,21 +225,26 @@ Interaction notes:
 The codebase is organized around explicit layers instead of one flat `src/` bucket:
 
 - `src/core`: deterministic rules, board state, RNG, and gameplay model
-- `src/ai`: search, evaluation, benchmark, and AI engine selection
-- `src/runtime`: pure C++ event processing, snapshots, control policy, and background AI worker
-- `src/input`: raw device polling plus normalized input routing
-- `src/ui`: layout, renderer, panels, overlays, animation, and UI metadata
-- `src/app`: CLI parsing and thin raylib application shell
+- `src/value`: n-tuple value function, weight IO, multistage promotion, and TC state
+- `src/search`: evaluator, greedy policy, expectimax, tile downgrading, and AI engine selection
+- `src/training`: benchmark runner and checkpoint selection policy
+- `src/experiment`: TOML profile parsing, profile execution, matrix expansion, and artifact writing
+- `src/cli`: raylib-free headless command adapter
+- `src/gui`: raylib app shell; `runtime`, `input`, and `ui` remain GUI-facing support layers
 
 Dependency direction is intentionally narrow:
 
 - `core` depends on no higher layer
-- `ai` depends on `core`
-- `runtime` depends on `core` and `ai`
+- `value` depends on `core`
+- `search` depends on `value`
+- `training` depends on `search`
+- `experiment` depends on `training`
+- `cli` depends on `experiment`
+- `runtime` depends on `core` and `search`
 - `shared` contains cross-cutting value types and utilities that may be reused by multiple layers without becoming a new behavior-owning subsystem
 - `input` depends on runtime overlay enums and UI layout geometry, but not on the full app loop
 - `ui` depends on immutable runtime snapshots, not on `Game`, `AIEngine`, or `RuntimeEngine` internals
-- `app` wires raylib input/rendering to runtime events and snapshots
+- `gui` wires raylib input/rendering to runtime events and snapshots
 
 ### 2. Include policy
 
@@ -193,9 +259,10 @@ This avoids relying on CMake to expose each subdirectory as a fallback include r
 
 ### 3. Logic / Render split
 
-- `board.*`, `board_fast.*`, `game.*`, `rng.*`, `stats.*`, and the AI stack are raylib-free.
-- `renderer.*`, `ui.*`, `layout.*`, `input.*`, `animation.*`, and `app.cpp` are the raylib-facing pieces.
+- `core`, `value`, `search`, `training`, `experiment`, and `cli` are raylib-free.
+- `renderer.*`, `ui.*`, `layout.*`, `input.*`, `animation.*`, and `gui/app.cpp` are the raylib-facing pieces.
 - `input_source.*` polls raw raylib state, while `pointer_input.*`, `gamepad_input.*`, and `input_system.*` normalize devices into a single per-frame `InputFrame`.
+- `gui/runtime_event_mapper.*` translates each normalized `InputFrame` into runtime events and owns held-move repeat timing.
 - `RuntimeEngine` owns gameplay state, overlay/control policy, board revisions, and snapshot production.
 - `AIWorker` owns background recommendation search and returns revision-tagged results.
 - The UI consumes immutable `RuntimeSnapshot` values. It does not decide rules or call AI services.
@@ -208,11 +275,18 @@ This avoids relying on CMake to expose each subdirectory as a fallback include r
 - stores tile values directly (`0, 2, 4, 8, ...`)
 - used for gameplay logic, move trace generation, tests, and rendering
 
-`FastBoard` is the AI / benchmark model:
+`FastBoard` is the common AI / benchmark model:
 
 - 64-bit bitboard
 - each cell stores `log2(tile)` in 4 bits, empty is `0`
 - supports cheap copies, hashing, move generation, and table-driven row transitions
+
+`PackedBoard` is the high-rank transform model:
+
+- 80-bit packed board (`uint64_t raw` + `uint16_t ext`)
+- each cell stores a 5-bit rank, so search/eval helpers can represent tiles beyond the 4-bit fast-board range
+- uses 20-bit row transition tables for high-rank row moves
+- exposes D4 transforms and conversion back to clamped `FastBoard` values for leaf evaluation
 
 ### 5. Game state
 
@@ -245,7 +319,7 @@ The input stack is layered so new devices can be added without touching rule cod
 - `PointerInputRouter` resolves swipe gestures and control hit-tests.
 - `GamepadInputRouter` handles button mapping and analog-stick debounce.
 - `InputSystem` collapses all active devices into a single `InputFrame` per render tick.
-- `app.cpp` maps the normalized frame into `RuntimeEvent` values.
+- `RuntimeEventMapper` maps the normalized frame into `RuntimeEvent` values.
 - `RuntimeEngine` consumes events and applies overlay, control-mode, and autoplay policy.
 
 This keeps device-specific ambiguity out of the gameplay state machine and makes the routing logic unit-testable without raylib globals.
@@ -271,7 +345,7 @@ Examples covered by tests:
 
 ### Fast board mechanics
 
-The fast representation uses precomputed row tables for all `2^16` 4-cell rows:
+The standard fast representation uses precomputed row tables for all `2^16` 4-cell rows:
 
 - left-move result row
 - right-move result row
@@ -279,13 +353,16 @@ The fast representation uses precomputed row tables for all `2^16` 4-cell rows:
 
 This lets horizontal moves run as four table lookups plus row packing. Vertical moves are implemented as transpose + horizontal move + transpose back.
 
+The packed high-rank representation uses equivalent `2^20` row tables and is used for transform/downgrade behavior that needs ranks above `15`.
+
 ## AI Design
 
 ### Agents
 
 - `GreedyAgent`: baseline policy using immediate move score + evaluator
 - `ExpectimaxAgent`: main agent for autoplay and benchmark
-- `AIEngine`: runtime switch between the two
+- `NtupleAgent`: direct policy over the learned value function
+- `AIEngine`: runtime switch between greedy, expectimax, and n-tuple agents
 
 ### Expectimax tree
 
@@ -302,6 +379,8 @@ This lets horizontal moves run as four table lookups plus row packing. Vertical 
 - move ordering from immediate score + heuristic
 - fixed-size transposition table
 - optional approximate chance-node expansion
+- D4 canonical transposition keys
+- optional tile-downgrading transform for n-tuple leaf evaluation
 
 Approximate chance expansion is off by default because it trades exact expectation for speed. When enabled, only the highest-impact empty cells are expanded and the subset is renormalized.
 
@@ -317,16 +396,16 @@ The evaluator is modular and exposes a per-feature breakdown:
 - weighted snake pattern (4 templates, best selected)
 - trap penalty
 
-All feature toggles and weights live in `src/core/config.h` and `src/ai/evaluator.h`.
+All feature toggles and weights live in `src/core/config.h` and `src/search/evaluator.h`.
 
 ## Performance Notes
 
-- 16-bit row transition tables avoid per-node line simulation
+- row transition tables avoid per-node line simulation
 - bitboard copies are trivial
 - expectimax reuses a fixed-size transposition table
 - move ordering reduces wasted deep branches
 - benchmark mode is fully headless
-- benchmark output exposes nodes per move and average think time per move
+- benchmark output exposes nodes, leaf evals, transposition hit rate, and average think time per move
 
 ## Benchmark Output
 
@@ -338,15 +417,17 @@ Current benchmark summary includes:
 - average max tile
 - average moves
 - average nodes per move
+- average leaf evals per move
+- transposition hit rate
 - average think time per move
 - total elapsed time
 - max tile distribution
-- achievement rates for `1024 / 2048 / 4096 / 8192`
+- achievement rates for configured milestone tiles up to `32768`
 
 CSV output writes one row per game:
 
 ```text
-seed,score,max_tile,moves,nodes,think_time_ms
+seed,score,max_tile,moves,nodes,cache_hits,leaf_evals,think_time_ms
 ```
 
 ## Testing
@@ -354,9 +435,12 @@ seed,score,max_tile,moves,nodes,think_time_ms
 Build and run:
 
 ```bash
+cmake --build build-server --target game2048_cli_tests
+./build-server/game2048_cli_tests
 cmake --build build --target game2048_tests
 ./build/game2048_tests
 ctest --test-dir build --output-on-failure
+ctest --test-dir build-server --output-on-failure
 ```
 
 Input-specific coverage includes:
@@ -367,8 +451,12 @@ Input-specific coverage includes:
 - overlay-specific gamepad command semantics
 - adaptive touch HUD layout exposure
 - runtime event dispatch and snapshot updates
+- frontend input-to-runtime event mapping
 - stale AI recommendation rejection by board revision
 - CLI subcommand parsing
+- CLI error messages for invalid inspect boards
+- TOML profile parsing and matrix expansion
+- profile-driven train/bench artifact generation
 
 Covered areas:
 
@@ -384,8 +472,8 @@ Covered areas:
 ## Current Status
 
 - Core rules compile and pass tests
-- Headless benchmark mode runs
-- Interactive app builds and runs with raylib
+- Headless profile train/bench/matrix mode runs
+- Interactive GUI builds and runs with raylib
 - Evaluator breakdown is visible in the side panel
 
 ## Extension Ideas

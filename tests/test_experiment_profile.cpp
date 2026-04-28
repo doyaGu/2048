@@ -328,6 +328,11 @@ seed = 42
 agent = "ntuple"
 eval_agent = "ntuple"
 final_games = 1
+approximate_chance_nodes = false
+max_chance_branches_per_value = 9
+preserve_chance_probability_mass = true
+adaptive_endgame_search = true
+root_rollout = true
 
 [value]
 preset = "compact-d4"
@@ -347,12 +352,19 @@ alpha = 0.01
     const std::string metricsText((std::istreambuf_iterator<char>(metrics)), std::istreambuf_iterator<char>());
     std::ifstream manifest(dir / "manifest.json");
     const std::string text((std::istreambuf_iterator<char>(manifest)), std::istreambuf_iterator<char>());
+    std::ifstream config(dir / "config.toml");
+    const std::string configText((std::istreambuf_iterator<char>(config)), std::istreambuf_iterator<char>());
     std::filesystem::remove_all(dir);
 
     EXPECT_TRUE(text.find("\"tc_persisted\": false") != std::string::npos);
     EXPECT_TRUE(metricsText.find("raw_selection_value") != std::string::npos);
     EXPECT_TRUE(metricsText.find("mean_abs_td_error") != std::string::npos);
     EXPECT_TRUE(metricsText.find("stage0_updates") != std::string::npos);
+    EXPECT_TRUE(configText.find("approximate_chance_nodes = false") != std::string::npos);
+    EXPECT_TRUE(configText.find("max_chance_branches_per_value = 9") != std::string::npos);
+    EXPECT_TRUE(configText.find("preserve_chance_probability_mass = true") != std::string::npos);
+    EXPECT_TRUE(configText.find("adaptive_endgame_search = true") != std::string::npos);
+    EXPECT_TRUE(configText.find("root_rollout = true") != std::string::npos);
 }
 
 TEST_CASE(TrainingProfile_Writes_Progress_Before_EvalInterval) {

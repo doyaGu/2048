@@ -68,23 +68,6 @@ std::array<std::array<int, kBoardSize>, kBoardSize> ParseBoardRows(const std::st
     return values;
 }
 
-ai::SearchConfig SearchConfigForProfile(const experiment::ExperimentProfile& profile) {
-    ai::SearchConfig config;
-    config.maxDepth = profile.search.depth;
-    config.timeBudgetMs = profile.search.timeBudgetMs;
-    if (profile.search.fixedPly) {
-        config.iterativeDeepening = false;
-        config.timeBudgetMs = 0;
-    }
-    config.useTileDowngrading = profile.search.downgrade.enabled &&
-        profile.search.downgrade.mode == experiment::SearchProfileConfig::DowngradeMode::Leaf;
-    config.useRootTileDowngrading = profile.search.downgrade.enabled &&
-        profile.search.downgrade.mode == experiment::SearchProfileConfig::DowngradeMode::Root;
-    config.tileDowngradeSteps = profile.search.downgrade.steps;
-    config.tileDowngradeFloorRank = profile.search.downgrade.floorRank;
-    return config;
-}
-
 int RunInspect(const CliOptions& options) {
     Board board = options.boardRows.has_value()
         ? Board::FromRows(ParseBoardRows(*options.boardRows))
@@ -96,7 +79,7 @@ int RunInspect(const CliOptions& options) {
     if (options.profilePath.has_value()) {
         const auto profile = experiment::LoadExperimentProfile(*options.profilePath);
         engine.SetAgent(profile.search.agent);
-        engine.Expectimax().SetConfig(SearchConfigForProfile(profile));
+        engine.Expectimax().SetConfig(experiment::BuildSearchConfig(profile.search));
     }
     if (options.weightPath.has_value()) {
         ai::NtupleNetwork network = ai::NtupleNetwork::Load(*options.weightPath);

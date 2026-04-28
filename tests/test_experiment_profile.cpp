@@ -137,6 +137,49 @@ enable_multistage = true
     EXPECT_TRUE(profile.phases[1].enableMultistage);
 }
 
+TEST_CASE(SearchProfile_Builds_StrongSearchConfig) {
+    game2048::experiment::SearchProfileConfig profile;
+    profile.depth = 6;
+    profile.timeBudgetMs = 250;
+    profile.fixedPly = true;
+    profile.approximateChanceNodes = false;
+    profile.maxChanceBranchesPerValue = 9;
+    profile.preserveChanceProbabilityMass = true;
+    profile.adaptiveEndgameSearch = true;
+    profile.endgameMinRank = 13;
+    profile.endgameDepthBonus = 2;
+    profile.endgameMaxChanceBranchesPerValue = 3;
+    profile.endgamePessimism = 0.12;
+    profile.canonicalizeTranspositionKeys = true;
+    profile.rootRollout = true;
+    profile.rootRolloutDepth = 8;
+    profile.rootRolloutWeight = 0.05;
+    profile.downgrade.enabled = true;
+    profile.downgrade.mode = game2048::experiment::SearchProfileConfig::DowngradeMode::Root;
+    profile.downgrade.steps = 1;
+    profile.downgrade.floorRank = 13;
+
+    const auto config = game2048::experiment::BuildSearchConfig(profile);
+
+    EXPECT_EQ(config.maxDepth, 6);
+    EXPECT_EQ(config.timeBudgetMs, 0);
+    EXPECT_FALSE(config.iterativeDeepening);
+    EXPECT_FALSE(config.approximateChanceNodes);
+    EXPECT_EQ(config.maxChanceBranchesPerValue, 9);
+    EXPECT_TRUE(config.preserveChanceProbabilityMass);
+    EXPECT_TRUE(config.adaptiveEndgameSearch);
+    EXPECT_EQ(config.endgameMinRank, 13);
+    EXPECT_EQ(config.endgameDepthBonus, 2);
+    EXPECT_EQ(config.endgameMaxChanceBranchesPerValue, 3);
+    EXPECT_NEAR(config.endgamePessimism, 0.12, 1e-9);
+    EXPECT_TRUE(config.canonicalizeTranspositionKeys);
+    EXPECT_TRUE(config.useRootRollout);
+    EXPECT_EQ(config.rootRolloutDepth, 8);
+    EXPECT_NEAR(config.rootRolloutWeight, 0.05, 1e-9);
+    EXPECT_FALSE(config.useTileDowngrading);
+    EXPECT_TRUE(config.useRootTileDowngrading);
+}
+
 TEST_CASE(TomlProfile_Rejects_LegacyTdl6Preset) {
     bool threw = false;
     try {

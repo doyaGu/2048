@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "experiment/profile.h"
+#include "search/expectimax.h"
 #include "shared/stats.h"
 
 namespace game2048::experiment {
@@ -31,5 +32,6 @@ TrainingRunResult RunTrainingProfile(const ExperimentProfile& profile, const std
 BenchmarkSummary RunBenchmarkProfile(const ExperimentProfile& profile, const std::string& weightsPath);
 MatrixRunResult RunMatrixProfile(const ExperimentProfile& profile, int maxJobs);
 ParityRunResult RunParityProfile(const ExperimentProfile& profile, const std::string& tdlBinPath = {});
+ai::SearchConfig BuildSearchConfig(const SearchProfileConfig& profile);
 
 }  // namespace game2048::experiment

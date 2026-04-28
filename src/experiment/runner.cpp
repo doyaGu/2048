@@ -25,14 +25,22 @@
 
 namespace game2048::experiment {
 
-namespace {
-
-namespace fs = std::filesystem;
-
-ai::SearchConfig ToSearchConfig(const SearchProfileConfig& profile) {
+ai::SearchConfig BuildSearchConfig(const SearchProfileConfig& profile) {
     ai::SearchConfig config;
     config.maxDepth = profile.depth;
     config.timeBudgetMs = profile.timeBudgetMs;
+    config.approximateChanceNodes = profile.approximateChanceNodes;
+    config.maxChanceBranchesPerValue = profile.maxChanceBranchesPerValue;
+    config.preserveChanceProbabilityMass = profile.preserveChanceProbabilityMass;
+    config.adaptiveEndgameSearch = profile.adaptiveEndgameSearch;
+    config.endgameMinRank = profile.endgameMinRank;
+    config.endgameDepthBonus = profile.endgameDepthBonus;
+    config.endgameMaxChanceBranchesPerValue = profile.endgameMaxChanceBranchesPerValue;
+    config.endgamePessimism = profile.endgamePessimism;
+    config.canonicalizeTranspositionKeys = profile.canonicalizeTranspositionKeys;
+    config.useRootRollout = profile.rootRollout;
+    config.rootRolloutDepth = profile.rootRolloutDepth;
+    config.rootRolloutWeight = profile.rootRolloutWeight;
     if (profile.fixedPly) {
         config.iterativeDeepening = false;
         config.timeBudgetMs = 0;
@@ -46,8 +54,12 @@ ai::SearchConfig ToSearchConfig(const SearchProfileConfig& profile) {
     return config;
 }
 
+namespace {
+
+namespace fs = std::filesystem;
+
 ai::SearchConfig ToEvalSearchConfig(const SearchProfileConfig& profile) {
-    ai::SearchConfig config = ToSearchConfig(profile);
+    ai::SearchConfig config = BuildSearchConfig(profile);
     if (profile.evalDepth > 0) {
         config.maxDepth = profile.evalDepth;
     }
@@ -535,7 +547,7 @@ BenchmarkSummary RunBenchmarkProfile(const ExperimentProfile& profile, const std
         profile.run.seed,
         false,
         profile.search.agent,
-        ToSearchConfig(profile.search),
+        BuildSearchConfig(profile.search),
         weightsPath,
         nullptr,
         profile.phases.empty() ? 0.0 : profile.phases.back().priorWeight,

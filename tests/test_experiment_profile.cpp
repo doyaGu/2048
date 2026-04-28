@@ -37,6 +37,18 @@ eval_threads = 4
 eval_depth = 2
 eval_time_budget_ms = 10
 fixed_ply = true
+approximate_chance_nodes = false
+max_chance_branches_per_value = 9
+preserve_chance_probability_mass = true
+adaptive_endgame_search = true
+endgame_min_rank = 13
+endgame_depth_bonus = 2
+endgame_max_chance_branches_per_value = 3
+endgame_pessimism = 0.12
+canonicalize_transposition_keys = true
+root_rollout = true
+root_rollout_depth = 8
+root_rollout_weight = 0.05
 
 [search.downgrade]
 enabled = true
@@ -95,6 +107,18 @@ enable_multistage = true
     EXPECT_EQ(profile.search.evalDepth, 2);
     EXPECT_EQ(profile.search.evalTimeBudgetMs, 10);
     EXPECT_TRUE(profile.search.fixedPly);
+    EXPECT_FALSE(profile.search.approximateChanceNodes);
+    EXPECT_EQ(profile.search.maxChanceBranchesPerValue, 9);
+    EXPECT_TRUE(profile.search.preserveChanceProbabilityMass);
+    EXPECT_TRUE(profile.search.adaptiveEndgameSearch);
+    EXPECT_EQ(profile.search.endgameMinRank, 13);
+    EXPECT_EQ(profile.search.endgameDepthBonus, 2);
+    EXPECT_EQ(profile.search.endgameMaxChanceBranchesPerValue, 3);
+    EXPECT_NEAR(profile.search.endgamePessimism, 0.12, 1e-9);
+    EXPECT_TRUE(profile.search.canonicalizeTranspositionKeys);
+    EXPECT_TRUE(profile.search.rootRollout);
+    EXPECT_EQ(profile.search.rootRolloutDepth, 8);
+    EXPECT_NEAR(profile.search.rootRolloutWeight, 0.05, 1e-9);
     EXPECT_TRUE(profile.search.downgrade.enabled);
     EXPECT_EQ(profile.search.downgrade.mode, game2048::experiment::SearchProfileConfig::DowngradeMode::Root);
     EXPECT_EQ(profile.search.downgrade.steps, 2);

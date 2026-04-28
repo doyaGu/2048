@@ -414,6 +414,24 @@ ExperimentProfile ParseExperimentProfileText(const std::string& text) {
     profile.search.evalDepth = ReadInt(search, "eval_depth", profile.search.evalDepth);
     profile.search.evalTimeBudgetMs = ReadInt(search, "eval_time_budget_ms", profile.search.evalTimeBudgetMs);
     profile.search.fixedPly = ReadBool(search, "fixed_ply", profile.search.fixedPly);
+    profile.search.approximateChanceNodes = ReadBool(search, "approximate_chance_nodes",
+                                                     profile.search.approximateChanceNodes);
+    profile.search.maxChanceBranchesPerValue = ReadInt(search, "max_chance_branches_per_value",
+                                                       profile.search.maxChanceBranchesPerValue);
+    profile.search.preserveChanceProbabilityMass = ReadBool(search, "preserve_chance_probability_mass",
+                                                            profile.search.preserveChanceProbabilityMass);
+    profile.search.adaptiveEndgameSearch = ReadBool(search, "adaptive_endgame_search",
+                                                    profile.search.adaptiveEndgameSearch);
+    profile.search.endgameMinRank = ReadInt(search, "endgame_min_rank", profile.search.endgameMinRank);
+    profile.search.endgameDepthBonus = ReadInt(search, "endgame_depth_bonus", profile.search.endgameDepthBonus);
+    profile.search.endgameMaxChanceBranchesPerValue = ReadInt(search, "endgame_max_chance_branches_per_value",
+                                                              profile.search.endgameMaxChanceBranchesPerValue);
+    profile.search.endgamePessimism = ReadDouble(search, "endgame_pessimism", profile.search.endgamePessimism);
+    profile.search.canonicalizeTranspositionKeys = ReadBool(search, "canonicalize_transposition_keys",
+                                                            profile.search.canonicalizeTranspositionKeys);
+    profile.search.rootRollout = ReadBool(search, "root_rollout", profile.search.rootRollout);
+    profile.search.rootRolloutDepth = ReadInt(search, "root_rollout_depth", profile.search.rootRolloutDepth);
+    profile.search.rootRolloutWeight = ReadDouble(search, "root_rollout_weight", profile.search.rootRolloutWeight);
     profile.search.evalGames = ReadSize(search, "eval_games", profile.search.evalGames);
     profile.search.evalInterval = ReadSize(search, "eval_interval", profile.search.evalInterval);
     profile.search.progressIntervalGames = ReadSize(search, "progress_interval_games",

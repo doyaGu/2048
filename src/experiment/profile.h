@@ -36,6 +36,18 @@ struct SearchProfileConfig {
     int evalDepth = 0;
     int evalTimeBudgetMs = 0;
     bool fixedPly = false;
+    bool approximateChanceNodes = ai::SearchConfig {}.approximateChanceNodes;
+    int maxChanceBranchesPerValue = ai::SearchConfig {}.maxChanceBranchesPerValue;
+    bool preserveChanceProbabilityMass = ai::SearchConfig {}.preserveChanceProbabilityMass;
+    bool adaptiveEndgameSearch = ai::SearchConfig {}.adaptiveEndgameSearch;
+    int endgameMinRank = ai::SearchConfig {}.endgameMinRank;
+    int endgameDepthBonus = ai::SearchConfig {}.endgameDepthBonus;
+    int endgameMaxChanceBranchesPerValue = ai::SearchConfig {}.endgameMaxChanceBranchesPerValue;
+    double endgamePessimism = ai::SearchConfig {}.endgamePessimism;
+    bool canonicalizeTranspositionKeys = ai::SearchConfig {}.canonicalizeTranspositionKeys;
+    bool rootRollout = ai::SearchConfig {}.useRootRollout;
+    int rootRolloutDepth = ai::SearchConfig {}.rootRolloutDepth;
+    double rootRolloutWeight = ai::SearchConfig {}.rootRolloutWeight;
     DowngradeConfig downgrade {};
     std::size_t evalGames = 0;
     std::size_t evalInterval = 0;

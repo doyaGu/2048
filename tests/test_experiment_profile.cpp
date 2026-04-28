@@ -180,6 +180,22 @@ TEST_CASE(SearchProfile_Builds_StrongSearchConfig) {
     EXPECT_TRUE(config.useRootTileDowngrading);
 }
 
+TEST_CASE(NtupleStrongProfile_Loads_StrongSearchSettings) {
+    const auto profile = game2048::experiment::LoadExperimentProfile("profiles/ntuple_strong.toml");
+
+    EXPECT_EQ(profile.value.tuplePreset, game2048::ai::NtuplePreset::Tdl8x6KMatsuzaki);
+    EXPECT_TRUE(profile.value.multistage);
+    EXPECT_EQ(profile.value.stageBoundaries.size(), std::size_t {1});
+    EXPECT_EQ(profile.value.stageBoundaries[0], 14);
+    EXPECT_TRUE(profile.search.fixedPly);
+    EXPECT_TRUE(profile.search.downgrade.enabled);
+    EXPECT_EQ(profile.search.downgrade.mode,
+              game2048::experiment::SearchProfileConfig::DowngradeMode::Root);
+    EXPECT_TRUE(profile.search.preserveChanceProbabilityMass);
+    EXPECT_TRUE(profile.search.adaptiveEndgameSearch);
+    EXPECT_TRUE(profile.search.canonicalizeTranspositionKeys);
+}
+
 TEST_CASE(TomlProfile_Rejects_LegacyTdl6Preset) {
     bool threw = false;
     try {

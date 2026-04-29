@@ -1,4 +1,4 @@
-#include "value/tdl8x6_kernel.h"
+#include "tdl/tdl8x6_kernel.h"
 
 #include <array>
 #include <stdexcept>

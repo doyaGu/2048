@@ -4,7 +4,7 @@
 #include <cstdint>
 
 #include "value/ntuple.h"
-#include "value/tdl_types.h"
+#include "tdl/types.h"
 
 namespace game2048::ai {
 

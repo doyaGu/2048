@@ -2,7 +2,7 @@
 #include "../src/experiment/runner.h"
 #include "../src/training/selection.h"
 #include "../src/value/ntuple.h"
-#include "../src/value/tdl_compat.h"
+#include "../src/tdl/api.h"
 #include "test_framework.h"
 
 #include <filesystem>

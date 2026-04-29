@@ -91,10 +91,6 @@ game2048_configure_target(game2048_core)
 add_library(game2048_value
     src/value/ntuple_kernel.cpp
     src/value/ntuple.cpp
-    src/value/tdl8x6_kernel.cpp
-    src/value/tdl_types.cpp
-    src/value/tdl_training_backend.cpp
-    src/value/tdl_compat.cpp
     src/search/evaluator.cpp
     src/search/greedy.cpp
 )
@@ -102,6 +98,20 @@ target_link_libraries(game2048_value PUBLIC game2048_core)
 game2048_configure_target(game2048_value)
 if (GAME2048_ENABLE_AVX512 AND CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|amd64")
     target_compile_definitions(game2048_value PRIVATE GAME2048_ENABLE_AVX512=1)
+endif()
+
+add_library(game2048_tdl
+    src/tdl/api.cpp
+    src/tdl/backend_fixed6.cpp
+    src/tdl/backend_network.cpp
+    src/tdl/tdl8x6_kernel.cpp
+    src/tdl/training_loop.cpp
+    src/tdl/types.cpp
+)
+target_link_libraries(game2048_tdl PUBLIC game2048_value)
+game2048_configure_target(game2048_tdl)
+if (GAME2048_ENABLE_AVX512 AND CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|amd64")
+    target_compile_definitions(game2048_tdl PRIVATE GAME2048_ENABLE_AVX512=1)
 endif()
 
 add_library(game2048_search
@@ -123,7 +133,7 @@ add_library(game2048_experiment
     src/experiment/profile.cpp
     src/experiment/runner.cpp
 )
-target_link_libraries(game2048_experiment PUBLIC game2048_training)
+target_link_libraries(game2048_experiment PUBLIC game2048_training game2048_tdl)
 game2048_configure_target(game2048_experiment)
 
 add_library(game2048_cli_lib

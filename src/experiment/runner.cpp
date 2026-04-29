@@ -21,7 +21,7 @@
 #include "training/benchmark.h"
 #include "training/selection.h"
 #include "value/ntuple.h"
-#include "value/tdl_compat.h"
+#include "tdl/api.h"
 
 namespace game2048::experiment {
 

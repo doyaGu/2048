@@ -1,7 +1,10 @@
-#include "value/tdl_compat.h"
+#include "tdl/api.h"
 
-#include "value/tdl_move_order.h"
-#include "value/tdl_training_backend.h"
+#include "tdl/backend_fixed6.h"
+#include "tdl/backend_network.h"
+#include "tdl/backend_tdl8x6.h"
+#include "tdl/move_order.h"
+#include "tdl/training_loop.h"
 
 #include <array>
 

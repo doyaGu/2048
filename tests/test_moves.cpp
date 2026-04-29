@@ -1,6 +1,7 @@
 #include <array>
 
 #include "../src/core/board.h"
+#include "../src/core/board_fast.h"
 #include "../src/core/game.h"
 #include "../src/core/rng.h"
 #include "test_framework.h"
@@ -81,6 +82,39 @@ TEST_CASE(Move_Up_Compresses_And_Merges) {
     EXPECT_TRUE(result.changed);
     EXPECT_EQ(result.scoreDelta, 12U);
     EXPECT_EQ(Flatten(board), (std::array<int, 16>{4, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}));
+}
+
+TEST_CASE(FastBoard_TdlOrderMoves_Match_IndividualMoves) {
+    const std::array<std::uint64_t, 4> boards {
+        0x0000000000000000ULL,
+        0x0000001000210000ULL,
+        0x123456789ABCDEF0ULL,
+        0x1111222233334444ULL,
+    };
+
+    for (std::uint64_t bits : boards) {
+        const game2048::FastBoard board(bits);
+        std::array<game2048::FastMoveResult, 4> moves {};
+        board.TdlOrderMoves(moves);
+
+        const auto up = board.MoveUp();
+        const auto right = board.MoveRight();
+        const auto down = board.MoveDown();
+        const auto left = board.MoveLeft();
+
+        EXPECT_EQ(moves[0].board, up.board);
+        EXPECT_EQ(moves[0].scoreDelta, up.scoreDelta);
+        EXPECT_EQ(moves[0].changed, up.changed);
+        EXPECT_EQ(moves[1].board, right.board);
+        EXPECT_EQ(moves[1].scoreDelta, right.scoreDelta);
+        EXPECT_EQ(moves[1].changed, right.changed);
+        EXPECT_EQ(moves[2].board, down.board);
+        EXPECT_EQ(moves[2].scoreDelta, down.scoreDelta);
+        EXPECT_EQ(moves[2].changed, down.changed);
+        EXPECT_EQ(moves[3].board, left.board);
+        EXPECT_EQ(moves[3].scoreDelta, left.scoreDelta);
+        EXPECT_EQ(moves[3].changed, left.changed);
+    }
 }
 
 TEST_CASE(Game_Reset_Spawns_Two_Tiles) {

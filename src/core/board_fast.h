@@ -37,6 +37,7 @@ public:
     FastMoveResult MoveRight() const;
     FastMoveResult MoveUp() const;
     FastMoveResult MoveDown() const;
+    void TdlOrderMoves(std::array<FastMoveResult, 4>& moves) const;
 
     bool CanMove() const;
     int CountEmpty() const;

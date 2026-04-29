@@ -4,6 +4,10 @@
 #include <array>
 #include <sstream>
 
+#if defined(__AVX2__) && (defined(__x86_64__) || defined(_M_X64))
+#include <immintrin.h>
+#endif
+
 namespace game2048 {
 
 namespace {
@@ -206,6 +210,31 @@ PackedBoard SetPackedRow(PackedBoard board, int row, std::uint32_t value) {
     return board;
 }
 
+[[maybe_unused]] std::uint16_t ExtractColumn(std::uint64_t bits, int col) {
+    const std::uint64_t shifted = bits >> (col * 4);
+    return static_cast<std::uint16_t>(
+        ((shifted & 0x000F000F000F000FULL) * 0x0001001001001000ULL) >> 48U);
+}
+
+[[maybe_unused]] std::uint64_t SetColumn(std::uint64_t bits, int col, std::uint16_t value) {
+    const std::uint64_t mask = 0x000F000F000F000FULL << (col * 4);
+    const std::uint64_t expanded = static_cast<std::uint64_t>(value) |
+                                   (static_cast<std::uint64_t>(value) << 12U) |
+                                   (static_cast<std::uint64_t>(value) << 24U) |
+                                   (static_cast<std::uint64_t>(value) << 36U);
+    return (bits & ~mask) | ((expanded & 0x000F000F000F000FULL) << (col * 4));
+}
+
+#if defined(__AVX2__) && (defined(__x86_64__) || defined(_M_X64))
+std::uint64_t TransposeBits64(std::uint64_t bits) {
+    std::uint64_t buffer = (bits ^ (bits >> 12U)) & 0x0000F0F00000F0F0ULL;
+    bits ^= buffer ^ (buffer << 12U);
+    buffer = (bits ^ (bits >> 24U)) & 0x00000000FF00FF00ULL;
+    bits ^= buffer ^ (buffer << 24U);
+    return bits;
+}
+#endif
+
 }  // namespace
 
 bool PackedBoardMoveTablesInitialized() {
@@ -215,12 +244,9 @@ bool PackedBoardMoveTablesInitialized() {
 FastBoard::FastBoard() = default;
 
 FastBoard::FastBoard(std::uint64_t bits)
-    : bits_(bits) {
-    EnsureTables();
-}
+    : bits_(bits) {}
 
 FastBoard FastBoard::FromReference(const Board& board) {
-    EnsureTables();
     std::uint64_t bits = 0;
     std::size_t index = 0;
     for (int value : board.Cells()) {
@@ -296,6 +322,148 @@ FastMoveResult FastBoard::MoveDown() const {
     return {FastBoard(moved.board).Transpose().Bits(), moved.scoreDelta, moved.changed};
 }
 
+void FastBoard::TdlOrderMoves(std::array<FastMoveResult, 4>& moves) const {
+#if defined(__AVX2__) && (defined(__x86_64__) || defined(_M_X64))
+    __m256i dst;
+    __m256i buffer;
+    __m256i ranks;
+    __m256i reward;
+    __m256i check;
+
+    const std::uint64_t transposed = TransposeBits64(bits_);
+    dst = _mm256_set_epi64x(static_cast<long long>(bits_), 0, 0, static_cast<long long>(transposed));
+    buffer = _mm256_set_epi64x(0, static_cast<long long>(transposed), static_cast<long long>(bits_), 0);
+    dst = _mm256_or_si256(dst, _mm256_slli_epi16(buffer, 12));
+    dst = _mm256_or_si256(dst, _mm256_slli_epi16(_mm256_and_si256(buffer, _mm256_set1_epi16(0x00f0)), 4));
+    dst = _mm256_or_si256(dst, _mm256_srli_epi16(_mm256_and_si256(buffer, _mm256_set1_epi16(0x0f00)), 4));
+    dst = _mm256_or_si256(dst, _mm256_srli_epi16(buffer, 12));
+
+    buffer = _mm256_and_si256(dst, _mm256_set1_epi16(0x0f00));
+    check = _mm256_and_si256(_mm256_cmpeq_epi16(buffer, _mm256_setzero_si256()),
+                             _mm256_set1_epi16(static_cast<short>(0xff00)));
+    dst = _mm256_or_si256(_mm256_and_si256(check, _mm256_srli_epi16(dst, 4)), _mm256_andnot_si256(check, dst));
+    buffer = _mm256_and_si256(dst, _mm256_set1_epi16(0x00f0));
+    check = _mm256_and_si256(_mm256_cmpeq_epi16(buffer, _mm256_setzero_si256()),
+                             _mm256_set1_epi16(static_cast<short>(0xfff0)));
+    dst = _mm256_or_si256(_mm256_and_si256(check, _mm256_srli_epi16(dst, 4)), _mm256_andnot_si256(check, dst));
+    buffer = _mm256_and_si256(dst, _mm256_set1_epi16(0x000f));
+    check = _mm256_cmpeq_epi16(buffer, _mm256_setzero_si256());
+    dst = _mm256_or_si256(_mm256_and_si256(check, _mm256_srli_epi16(dst, 4)), _mm256_andnot_si256(check, dst));
+
+    buffer = _mm256_srli_epi16(_mm256_add_epi8(dst, _mm256_set1_epi16(0x0010)), 4);
+    ranks = _mm256_and_si256(dst, _mm256_set1_epi16(0x000f));
+    check = _mm256_and_si256(_mm256_srli_epi16(dst, 4), _mm256_set1_epi16(0x000f));
+    check = _mm256_andnot_si256(_mm256_cmpeq_epi16(ranks, _mm256_setzero_si256()), _mm256_cmpeq_epi16(ranks, check));
+    dst = _mm256_or_si256(_mm256_and_si256(check, buffer), _mm256_andnot_si256(check, dst));
+    check = _mm256_cvtepu16_epi32(_mm256_extracti128_si256(_mm256_and_si256(check, _mm256_set1_epi16(0x0001)), 0));
+    ranks = _mm256_cvtepu16_epi32(_mm256_extracti128_si256(_mm256_add_epi16(ranks, _mm256_set1_epi16(0x0001)), 0));
+    reward = _mm256_sllv_epi32(check, ranks);
+
+    buffer = _mm256_add_epi8(_mm256_srli_epi16(dst, 4), _mm256_set1_epi16(0x0010));
+    ranks = _mm256_and_si256(buffer, _mm256_set1_epi16(0x000f));
+    check = _mm256_and_si256(_mm256_srli_epi16(dst, 8), _mm256_set1_epi16(0x000f));
+    check = _mm256_andnot_si256(_mm256_cmpeq_epi16(ranks, _mm256_setzero_si256()), _mm256_cmpeq_epi16(ranks, check));
+    check = _mm256_and_si256(check, _mm256_set1_epi16(static_cast<short>(0xfff0)));
+    dst = _mm256_or_si256(_mm256_and_si256(check, buffer), _mm256_andnot_si256(check, dst));
+    check = _mm256_cvtepu16_epi32(_mm256_extracti128_si256(_mm256_srli_epi16(check, 15), 0));
+    ranks = _mm256_cvtepu16_epi32(_mm256_extracti128_si256(_mm256_add_epi16(ranks, _mm256_set1_epi16(0x0001)), 0));
+    reward = _mm256_add_epi32(reward, _mm256_sllv_epi32(check, ranks));
+
+    buffer = _mm256_srli_epi16(_mm256_add_epi16(dst, _mm256_set1_epi16(0x1000)), 4);
+    ranks = _mm256_srli_epi16(dst, 12);
+    check = _mm256_and_si256(_mm256_srli_epi16(dst, 8), _mm256_set1_epi16(0x000f));
+    check = _mm256_andnot_si256(_mm256_cmpeq_epi16(ranks, _mm256_setzero_si256()), _mm256_cmpeq_epi16(ranks, check));
+    check = _mm256_and_si256(check, _mm256_set1_epi16(static_cast<short>(0xff00)));
+    dst = _mm256_or_si256(_mm256_and_si256(check, buffer), _mm256_andnot_si256(check, dst));
+    check = _mm256_cvtepu16_epi32(_mm256_extracti128_si256(_mm256_srli_epi16(check, 15), 0));
+    ranks = _mm256_cvtepu16_epi32(_mm256_extracti128_si256(_mm256_add_epi16(ranks, _mm256_set1_epi16(0x0001)), 0));
+    reward = _mm256_add_epi32(reward, _mm256_sllv_epi32(check, ranks));
+
+    const std::uint64_t left = static_cast<std::uint64_t>(_mm256_extract_epi64(dst, 3));
+    buffer = _mm256_slli_epi16(dst, 12);
+    buffer = _mm256_or_si256(buffer, _mm256_slli_epi16(_mm256_and_si256(dst, _mm256_set1_epi16(0x00f0)), 4));
+    buffer = _mm256_or_si256(buffer, _mm256_srli_epi16(_mm256_and_si256(dst, _mm256_set1_epi16(0x0f00)), 4));
+    buffer = _mm256_or_si256(buffer, _mm256_srli_epi16(dst, 12));
+    const std::uint64_t right = static_cast<std::uint64_t>(_mm256_extract_epi64(buffer, 1));
+
+    buffer = _mm256_blend_epi32(dst, buffer, 0b11111100);
+    ranks = _mm256_and_si256(_mm256_xor_si256(buffer, _mm256_srli_epi64(buffer, 12)),
+                             _mm256_set1_epi64x(0x0000f0f00000f0f0LL));
+    buffer = _mm256_xor_si256(buffer, _mm256_xor_si256(ranks, _mm256_slli_epi64(ranks, 12)));
+    ranks = _mm256_and_si256(_mm256_xor_si256(buffer, _mm256_srli_epi64(buffer, 24)),
+                             _mm256_set1_epi64x(0x00000000ff00ff00LL));
+    buffer = _mm256_xor_si256(buffer, _mm256_xor_si256(ranks, _mm256_slli_epi64(ranks, 24)));
+    const std::uint64_t up = static_cast<std::uint64_t>(_mm256_extract_epi64(buffer, 0));
+    const std::uint64_t down = static_cast<std::uint64_t>(_mm256_extract_epi64(buffer, 2));
+
+    reward = _mm256_add_epi64(reward, _mm256_srli_si256(reward, 8));
+    reward = _mm256_add_epi64(reward, _mm256_srli_epi64(reward, 32));
+    const std::uint32_t upScore = static_cast<std::uint32_t>(_mm256_extract_epi32(reward, 0));
+    const std::uint32_t rightScore = static_cast<std::uint32_t>(_mm256_extract_epi32(reward, 4));
+    const __m256i selectedScores = _mm256_set_epi64x(static_cast<long long>(rightScore),
+                                                     static_cast<long long>(upScore),
+                                                     static_cast<long long>(rightScore),
+                                                     static_cast<long long>(upScore));
+    check = _mm256_cmpeq_epi64(_mm256_set_epi64x(static_cast<long long>(left),
+                                                static_cast<long long>(down),
+                                                static_cast<long long>(right),
+                                                static_cast<long long>(up)),
+                               _mm256_set1_epi64x(static_cast<long long>(bits_)));
+    const __m256i infos = _mm256_or_si256(selectedScores, check);
+
+    const std::uint32_t upInfo = static_cast<std::uint32_t>(_mm256_extract_epi32(infos, 0));
+    const std::uint32_t rightInfo = static_cast<std::uint32_t>(_mm256_extract_epi32(infos, 2));
+    const std::uint32_t downInfo = static_cast<std::uint32_t>(_mm256_extract_epi32(infos, 4));
+    const std::uint32_t leftInfo = static_cast<std::uint32_t>(_mm256_extract_epi32(infos, 6));
+    const bool upChanged = upInfo != UINT32_MAX;
+    const bool rightChanged = rightInfo != UINT32_MAX;
+    const bool downChanged = downInfo != UINT32_MAX;
+    const bool leftChanged = leftInfo != UINT32_MAX;
+    moves[0] = {up, upChanged ? upInfo : 0U, upChanged};
+    moves[1] = {right, rightChanged ? rightInfo : 0U, rightChanged};
+    moves[2] = {down, downChanged ? downInfo : 0U, downChanged};
+    moves[3] = {left, leftChanged ? leftInfo : 0U, leftChanged};
+    return;
+#else
+    EnsureTables();
+    const auto& tables = Tables();
+
+    std::uint64_t up = bits_;
+    std::uint64_t right = bits_;
+    std::uint64_t down = bits_;
+    std::uint64_t left = bits_;
+    std::uint32_t upScore = 0;
+    std::uint32_t rightScore = 0;
+    std::uint32_t downScore = 0;
+    std::uint32_t leftScore = 0;
+
+    for (int row = 0; row < kBoardSize; ++row) {
+        const std::uint16_t current = ExtractRow(bits_, row);
+        const std::uint16_t movedLeft = tables.leftResult[current];
+        const std::uint16_t movedRight = tables.rightResult[current];
+        left = SetRow(left, row, movedLeft);
+        right = SetRow(right, row, movedRight);
+        leftScore += tables.leftScore[current];
+        rightScore += tables.rightScore[current];
+    }
+
+    for (int col = 0; col < kBoardSize; ++col) {
+        const std::uint16_t current = ExtractColumn(bits_, col);
+        const std::uint16_t movedUp = tables.leftResult[current];
+        const std::uint16_t movedDown = tables.rightResult[current];
+        up = SetColumn(up, col, movedUp);
+        down = SetColumn(down, col, movedDown);
+        upScore += tables.leftScore[current];
+        downScore += tables.rightScore[current];
+    }
+
+    moves[0] = {up, upScore, up != bits_};
+    moves[1] = {right, rightScore, right != bits_};
+    moves[2] = {down, downScore, down != bits_};
+    moves[3] = {left, leftScore, left != bits_};
+#endif
+}
+
 bool FastBoard::CanMove() const {
     if (CountEmpty() > 0) {
         return true;
@@ -337,13 +505,24 @@ int FastBoard::MaxTile() const {
 }
 
 FastBoard FastBoard::Transpose() const {
-    FastBoard out;
-    for (int row = 0; row < kBoardSize; ++row) {
-        for (int col = 0; col < kBoardSize; ++col) {
-            out.SetRank(col * kBoardSize + row, GetRank(row * kBoardSize + col));
-        }
-    }
-    return out;
+    std::uint64_t out = 0;
+    out |= bits_ & 0xFULL;
+    out |= ((bits_ >> 4U) & 0xFULL) << 16U;
+    out |= ((bits_ >> 8U) & 0xFULL) << 32U;
+    out |= ((bits_ >> 12U) & 0xFULL) << 48U;
+    out |= ((bits_ >> 16U) & 0xFULL) << 4U;
+    out |= bits_ & (0xFULL << 20U);
+    out |= ((bits_ >> 24U) & 0xFULL) << 36U;
+    out |= ((bits_ >> 28U) & 0xFULL) << 52U;
+    out |= ((bits_ >> 32U) & 0xFULL) << 8U;
+    out |= ((bits_ >> 36U) & 0xFULL) << 24U;
+    out |= bits_ & (0xFULL << 40U);
+    out |= ((bits_ >> 44U) & 0xFULL) << 56U;
+    out |= ((bits_ >> 48U) & 0xFULL) << 12U;
+    out |= ((bits_ >> 52U) & 0xFULL) << 28U;
+    out |= ((bits_ >> 56U) & 0xFULL) << 44U;
+    out |= bits_ & (0xFULL << 60U);
+    return FastBoard(out);
 }
 
 FastBoard FastBoard::Mirror() const {

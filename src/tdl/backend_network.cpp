@@ -1,8 +1,6 @@
 #include "tdl/backend_network.h"
 
-#include <array>
-#include <limits>
-
+#include "tdl/backend_common.h"
 #include "tdl/move_order.h"
 
 namespace game2048::ai {
@@ -25,25 +23,17 @@ TdlCandidateMove NetworkEvalBackend::ChooseBest(const FastBoard& board) const {
 namespace tdl_backend_detail {
 
 TdlCandidateMove ChooseBestWithNetworkEvaluator(const FastBoard& board, const NtupleNetwork& network) {
-    TdlCandidateMove best;
-    best.value = -std::numeric_limits<double>::infinity();
-    std::array<FastMoveResult, 4> moves {};
-    board.TdlOrderMoves(moves);
-    for (std::size_t index = 0; index < moves.size(); ++index) {
-        const FastMoveResult& move = moves[index];
-        if (!move.changed) {
-            continue;
-        }
-        const FastBoard afterstate(move.board);
-        const double value = static_cast<double>(move.scoreDelta) + network.Evaluate(afterstate);
-        if (!best.valid || value > best.value) {
+    return ChooseBestByTdlOrder<TdlCandidateMove>(
+        board,
+        [&network](const FastMoveResult& move) {
+            return network.Evaluate(FastBoard(move.board));
+        },
+        [](TdlCandidateMove& best, std::size_t index, const FastMoveResult& move, double value) {
             best.valid = true;
             best.direction = kTdlMoveDirections[index];
             best.move = move;
             best.value = value;
-        }
-    }
-    return best;
+        });
 }
 
 }  // namespace tdl_backend_detail

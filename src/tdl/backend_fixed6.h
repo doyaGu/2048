@@ -2,22 +2,20 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <limits>
 
 #include "core/board_fast.h"
+#include "tdl/backend_common.h"
 #include "value/ntuple.h"
 #include "value/ntuple_kernel.h"
 
 namespace game2048::ai {
 
 struct Fixed6TdMove {
-    static constexpr double kInvalidValue = -std::numeric_limits<double>::infinity();
-
     std::uint64_t board = 0;
-    double value = kInvalidValue;
+    double value = tdl_backend_detail::kInvalidMoveValue;
     std::uint32_t scoreDelta = 0;
 
-    bool Valid() const { return value != kInvalidValue; }
+    bool Valid() const { return tdl_backend_detail::IsValidMoveValue(value); }
 };
 
 class Fixed6TdBackend {
@@ -40,7 +38,9 @@ public:
     static std::uint64_t AfterstateBits(const Fixed6TdMove& move) { return move.board; }
     static std::uint32_t ScoreDelta(const Fixed6TdMove& move) { return move.scoreDelta; }
     static double TargetValue(const Fixed6TdMove& move) { return move.value; }
-    static std::size_t InitialStageUpdateCount(const NtupleNetwork&) { return 1; }
+    static std::size_t InitialStageUpdateCount(const NtupleNetwork& network) {
+        return tdl_backend_detail::SingleStageUpdateCount(network);
+    }
 
 private:
     NtupleMutableFixed6View view_ {};

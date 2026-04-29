@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "tdl/backend_common.h"
 #include "tdl/tdl8x6_kernel.h"
 #include "value/ntuple.h"
 
@@ -25,7 +26,9 @@ public:
     static std::uint64_t AfterstateBits(const Tdl8x6BestMove& move) { return move.board; }
     static std::uint32_t ScoreDelta(const Tdl8x6BestMove& move) { return move.scoreDelta; }
     static double TargetValue(const Tdl8x6BestMove& move) { return move.value; }
-    static std::size_t InitialStageUpdateCount(const NtupleNetwork&) { return 1; }
+    static std::size_t InitialStageUpdateCount(const NtupleNetwork& network) {
+        return tdl_backend_detail::SingleStageUpdateCount(network);
+    }
 
 private:
     Tdl8x6Kernel kernel_;

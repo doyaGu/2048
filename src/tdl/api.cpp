@@ -10,23 +10,30 @@
 
 namespace game2048::ai {
 
+namespace {
+
+TdlCandidateMove ToPublicCandidate(const FastBoard& board, const Tdl8x6BestMove& best) {
+    if (!best.Valid()) {
+        return {};
+    }
+    std::array<FastMoveResult, 4> moves {};
+    board.TdlOrderMoves(moves);
+    for (std::size_t index = 0; index < moves.size(); ++index) {
+        if (moves[index].changed && moves[index].board == best.board &&
+            moves[index].scoreDelta == best.scoreDelta) {
+            return {moves[index], kTdlMoveDirections[index], best.value, true};
+        }
+    }
+    return {FastMoveResult {best.board, best.scoreDelta, true}, Direction::Up, best.value, true};
+}
+
+}  // namespace
+
 TdlCandidateMove ChooseTdlBestMove(const FastBoard& board, const NtupleNetwork& network) {
     const NtupleFixed6View view = network.Fixed6SingleStageView(LearningMode::TD);
     if (Tdl8x6Kernel::Supports(view)) {
         const Tdl8x6Kernel kernel(view);
-        const Tdl8x6BestMove best = kernel.ChooseBest(board);
-        if (!best.Valid()) {
-            return {};
-        }
-        std::array<FastMoveResult, 4> moves {};
-        board.TdlOrderMoves(moves);
-        for (std::size_t index = 0; index < moves.size(); ++index) {
-            if (moves[index].changed && moves[index].board == best.board &&
-                moves[index].scoreDelta == best.scoreDelta) {
-                return {moves[index], kTdlMoveDirections[index], best.value, true};
-            }
-        }
-        return {FastMoveResult {best.board, best.scoreDelta, true}, Direction::Up, best.value, true};
+        return ToPublicCandidate(board, kernel.ChooseBest(board));
     }
 
     return tdl_backend_detail::ChooseBestWithNetworkEvaluator(board, network);

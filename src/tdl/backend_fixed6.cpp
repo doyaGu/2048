@@ -1,6 +1,5 @@
 #include "tdl/backend_fixed6.h"
 
-#include <array>
 #include <stdexcept>
 
 namespace game2048::ai {
@@ -23,21 +22,16 @@ double Fixed6TdBackend::Evaluate(std::uint64_t bits) const {
 }
 
 Fixed6TdMove Fixed6TdBackend::ChooseBest(const FastBoard& board) const {
-    Fixed6TdMove best;
-    std::array<FastMoveResult, 4> moves {};
-    board.TdlOrderMoves(moves);
-    for (const FastMoveResult& move : moves) {
-        if (!move.changed) {
-            continue;
-        }
-        const double value = static_cast<double>(move.scoreDelta) + Evaluate(move.board);
-        if (value > best.value) {
+    return tdl_backend_detail::ChooseBestByTdlOrder<Fixed6TdMove>(
+        board,
+        [this](const FastMoveResult& move) {
+            return Evaluate(move.board);
+        },
+        [](Fixed6TdMove& best, std::size_t, const FastMoveResult& move, double value) {
             best.board = move.board;
             best.scoreDelta = move.scoreDelta;
             best.value = value;
-        }
-    }
-    return best;
+        });
 }
 
 NtupleUpdateStats Fixed6TdBackend::Update(std::uint64_t bits, double target, double alpha) const {

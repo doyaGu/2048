@@ -283,6 +283,7 @@ TrainingRunResult RunTdlForwardTrainingProfileInternal(const ExperimentProfile& 
             training.seed = static_cast<std::uint32_t>(profile.run.seed);
             training.alpha = profile.trainer.alpha;
             training.learningMode = profile.trainer.learningMode;
+            training.fastPath = profile.trainer.fastPath;
             const auto started = std::chrono::steady_clock::now();
             const ai::NtupleTrainingStats chunkStats = ai::TrainTdlForward(network, trainRng, training);
             const double elapsedSec = std::chrono::duration<double>(
@@ -837,6 +838,7 @@ ParityRunResult RunParityProfile(const ExperimentProfile& profile, const std::st
             training.seed = static_cast<std::uint32_t>(profile.run.seed);
             training.alpha = profile.trainer.alpha;
             training.learningMode = profile.trainer.learningMode;
+            training.fastPath = profile.trainer.fastPath;
             const auto started = std::chrono::steady_clock::now();
             const ai::NtupleTrainingStats chunkStats = ai::TrainTdlForward(network, trainRng, training);
             const double chunkElapsedSec = std::chrono::duration<double>(
@@ -901,13 +903,20 @@ ParityRunResult RunParityProfile(const ExperimentProfile& profile, const std::st
             << status << '\n';
         csv.flush();
 
+        const double trainGamesPerSec = elapsedSec > 0.0
+            ? static_cast<double>(trainStats.games) / elapsedSec
+            : 0.0;
+        const double trainMovesPerSec = elapsedSec > 0.0
+            ? static_cast<double>(trainStats.moves) / elapsedSec
+            : 0.0;
         std::cout << "checkpoint=" << checkpoint
                   << " trained_chunk_games=" << trainStats.games
                   << " current_avg=" << currentAvg
                   << " tdl_avg=" << tdlAvg
                   << " gap=" << gap
                   << " status=" << status
-                  << " train_games_per_sec=" << (elapsedSec > 0.0 ? static_cast<double>(trainStats.games) / elapsedSec : 0.0)
+                  << " train_games_per_sec=" << trainGamesPerSec
+                  << " train_moves_per_sec=" << trainMovesPerSec
                   << '\n';
         network.Save((artifactDir / ("checkpoint-" + std::to_string(checkpoint) + ".weights")).string());
         if (!result.passed) {

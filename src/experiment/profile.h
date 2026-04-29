@@ -96,6 +96,7 @@ struct TrainerProfileConfig {
     double alpha = 0.1;
     ai::LearningMode learningMode = ai::LearningMode::TD;
     std::vector<std::size_t> checkpoints {};
+    bool fastPath = false;
 };
 
 struct EvalProfileConfig {

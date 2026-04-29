@@ -13,6 +13,7 @@ games = 20000
 progress_interval_games = 5000
 alpha = 0.1
 learning_mode = "td"
+fast_path = true
 checkpoints = [20000]
 
 [eval]

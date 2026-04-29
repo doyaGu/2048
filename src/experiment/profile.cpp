@@ -463,6 +463,7 @@ ExperimentProfile ParseExperimentProfileText(const std::string& text) {
     profile.trainer.alpha = ReadDouble(trainer, "alpha", profile.trainer.alpha);
     profile.trainer.learningMode = ParseLearningMode(ReadString(trainer, "learning_mode", "td"));
     profile.trainer.checkpoints = ReadSizeArray(trainer, "checkpoints");
+    profile.trainer.fastPath = ReadBool(trainer, "fast_path", profile.trainer.fastPath);
 
     const auto& eval = Table(doc, "eval");
     profile.eval.mode = ReadString(eval, "mode", profile.eval.mode);

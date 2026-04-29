@@ -251,11 +251,34 @@ dir = "artifacts/tdl-parity-smoke"
     EXPECT_EQ(profile.trainer.games, std::size_t {20000});
     EXPECT_EQ(profile.trainer.progressIntervalGames, std::size_t {5000});
     EXPECT_NEAR(profile.trainer.alpha, 0.1, 1e-9);
+    EXPECT_FALSE(profile.trainer.fastPath);
     EXPECT_EQ(profile.trainer.checkpoints.size(), std::size_t {1});
     EXPECT_EQ(profile.trainer.checkpoints[0], std::size_t {20000});
     EXPECT_EQ(profile.eval.mode, std::string("tdl-best"));
     EXPECT_EQ(profile.eval.games, std::size_t {1000});
     EXPECT_EQ(profile.eval.referenceCachePath, std::string("artifacts/tdl-reference-cache.csv"));
+}
+
+TEST_CASE(TomlProfile_ParsesTdlForwardFastPathFlag) {
+    const std::string text = R"(
+[run]
+name = "tdl-fast"
+
+[value]
+preset = "tdl-8x6-kmatsuzaki"
+
+[trainer]
+mode = "tdl-forward-td"
+games = 1
+fast_path = true
+
+[eval]
+mode = "tdl-best"
+)";
+
+    const auto profile = game2048::experiment::ParseExperimentProfileText(text);
+
+    EXPECT_TRUE(profile.trainer.fastPath);
 }
 
 TEST_CASE(TomlProfile_RejectsMissingPhase) {

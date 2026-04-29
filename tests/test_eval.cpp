@@ -3,6 +3,9 @@
 #include "../src/training/benchmark.h"
 #include "../src/value/ntuple.h"
 #include "../src/value/tdl_compat.h"
+#include "../src/value/tdl_types.h"
+#include "../src/value/tdl8x6_kernel.h"
+#include "../src/value/tdl_training_backend.h"
 #include "../src/value/ntuple_kernel.h"
 #include "../src/search/transposition_table.h"
 #include "../src/core/board.h"
@@ -12,10 +15,12 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdio>
 #include <fstream>
 #include <iterator>
 #include <limits>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
@@ -266,6 +271,320 @@ TEST_CASE(TdlForwardTraining_UsesOptimisticValueScale) {
     game2048::FastBoard board(0x210000000ULL);
 
     EXPECT_NEAR(network.Evaluate(board), 320000.0, 1.0);
+}
+
+TEST_CASE(TdlTypes_HeaderExposesSharedTrainingTypes) {
+    game2048::ai::TdlForwardTrainingOptions options;
+    options.games = 3;
+    options.seed = 700000U;
+
+    game2048::ai::TdlRandom rng(options.seed);
+    const game2048::FastBoard board = rng.InitBoard();
+    game2048::ai::TdlCandidateMove move;
+    move.move = board.MoveLeft();
+    move.valid = move.move.changed;
+
+    EXPECT_EQ(options.games, std::size_t {3});
+    EXPECT_TRUE(board.Bits() != 0);
+}
+
+TEST_CASE(TdlForwardTraining_FastPathMatchesGenericForFixedSeed) {
+    using game2048::ai::NtupleNetwork;
+    using game2048::ai::NtuplePreset;
+    using game2048::ai::PatternSetForPreset;
+    using game2048::ai::TdlForwardTrainingOptions;
+    using game2048::ai::TdlRandom;
+    using game2048::ai::TrainTdlForward;
+
+    NtupleNetwork generic(PatternSetForPreset(NtuplePreset::Tdl8x6KMatsuzaki), 320000.0F);
+    NtupleNetwork fast(PatternSetForPreset(NtuplePreset::Tdl8x6KMatsuzaki), 320000.0F);
+    TdlForwardTrainingOptions genericOptions;
+    genericOptions.games = 8;
+    genericOptions.alpha = 0.1;
+    genericOptions.maxMovesPerGame = 32;
+    TdlForwardTrainingOptions fastOptions = genericOptions;
+    fastOptions.fastPath = true;
+
+    TdlRandom genericRng(700000U);
+    TdlRandom fastRng(700000U);
+    const auto genericStats = TrainTdlForward(generic, genericRng, genericOptions);
+    const auto fastStats = TrainTdlForward(fast, fastRng, fastOptions);
+
+    EXPECT_EQ(fastStats.games, genericStats.games);
+    EXPECT_EQ(fastStats.moves, genericStats.moves);
+    EXPECT_EQ(fastStats.updates, genericStats.updates);
+    EXPECT_EQ(fastStats.totalScore, genericStats.totalScore);
+    EXPECT_EQ(fastStats.maxTile, genericStats.maxTile);
+    EXPECT_NEAR(fastStats.meanAbsTdError, genericStats.meanAbsTdError, 1e-9);
+    EXPECT_NEAR(fastStats.rmsTdError, genericStats.rmsTdError, 1e-9);
+
+    const std::array<game2048::FastBoard, 3> probes {
+        game2048::FastBoard(0x210000000ULL),
+        game2048::FastBoard(0x1000211000000ULL),
+        game2048::FastBoard(0x123456789ABCDEF0ULL),
+    };
+    for (const auto& board : probes) {
+        EXPECT_NEAR(fast.Evaluate(board), generic.Evaluate(board), 1e-6);
+    }
+}
+
+TEST_CASE(TdlBestMove_NonCanonicalFallbackMatchesNetworkEvaluatorHelper) {
+    using game2048::ai::ChooseTdlBestMove;
+    using game2048::ai::NtupleNetwork;
+    using game2048::ai::NtuplePattern;
+    using game2048::ai::tdl_backend_detail::ChooseBestWithNetworkEvaluator;
+
+    NtupleNetwork network({NtuplePattern{{0, 1, 2, 3}}}, 1000.0F);
+    const FastBoard board(0x1000211000000ULL);
+
+    const auto publicMove = ChooseTdlBestMove(board, network);
+    const auto helperMove = ChooseBestWithNetworkEvaluator(board, network);
+
+    EXPECT_EQ(publicMove.valid, helperMove.valid);
+    EXPECT_EQ(publicMove.direction, helperMove.direction);
+    EXPECT_EQ(publicMove.move.board, helperMove.move.board);
+    EXPECT_EQ(publicMove.move.scoreDelta, helperMove.move.scoreDelta);
+    EXPECT_NEAR(publicMove.value, helperMove.value, 1e-9);
+}
+
+TEST_CASE(TdlEvaluateBest_NonFixed6FallbackSmoke) {
+    using game2048::ai::EvaluateTdlBest;
+    using game2048::ai::NtupleNetwork;
+    using game2048::ai::NtuplePattern;
+
+    NtupleNetwork network({NtuplePattern{{0, 1, 2, 3}}}, 1000.0F);
+    const auto stats = EvaluateTdlBest(network, 700000U, 3, 16);
+
+    EXPECT_EQ(stats.games, std::size_t {3});
+    EXPECT_TRUE(stats.moves > 0);
+    EXPECT_TRUE(stats.totalScore > 0);
+}
+
+TEST_CASE(TdlForwardTraining_Fixed6BackendRunsAgainstNetworkBackendForFixedSeed) {
+    using game2048::ai::NtupleNetwork;
+    using game2048::ai::NtuplePreset;
+    using game2048::ai::PatternSetForPreset;
+    using game2048::ai::TdlForwardTrainingOptions;
+    using game2048::ai::TdlRandom;
+    using game2048::ai::TrainTdlForward;
+
+    const auto fixedSet = PatternSetForPreset(NtuplePreset::Tdl4x6Khyeh);
+    auto networkSet = fixedSet;
+    networkSet.useFixedPath = false;
+    NtupleNetwork fixedBackend(fixedSet, 1000.0F);
+    NtupleNetwork networkBackend(networkSet, 1000.0F);
+
+    TdlForwardTrainingOptions options;
+    options.games = 8;
+    options.alpha = 0.1;
+    options.maxMovesPerGame = 32;
+
+    TdlRandom fixedRng(700000U);
+    TdlRandom networkRng(700000U);
+    const auto fixedStats = TrainTdlForward(fixedBackend, fixedRng, options);
+    const auto networkStats = TrainTdlForward(networkBackend, networkRng, options);
+
+    EXPECT_EQ(fixedStats.games, networkStats.games);
+    EXPECT_TRUE(fixedStats.moves > 0);
+    EXPECT_TRUE(networkStats.moves > 0);
+    EXPECT_TRUE(fixedStats.updates > 0);
+    EXPECT_TRUE(networkStats.updates > 0);
+    EXPECT_TRUE(fixedStats.totalScore > 0);
+    EXPECT_TRUE(networkStats.totalScore > 0);
+
+    const std::array<game2048::FastBoard, 3> probes {
+        game2048::FastBoard(0x210000000ULL),
+        game2048::FastBoard(0x1000211000000ULL),
+        game2048::FastBoard(0x123456789ABCDEF0ULL),
+    };
+    for (const auto& board : probes) {
+        EXPECT_TRUE(std::isfinite(fixedBackend.Evaluate(board)));
+        EXPECT_TRUE(std::isfinite(networkBackend.Evaluate(board)));
+    }
+}
+
+TEST_CASE(TdlForwardTraining_FallsBackForNonFixed6OrNonTd) {
+    using game2048::ai::NtupleNetwork;
+    using game2048::ai::NtuplePattern;
+    using game2048::ai::TdlForwardTrainingOptions;
+    using game2048::ai::TdlRandom;
+    using game2048::ai::TrainTdlForward;
+
+    NtupleNetwork nonFixed({NtuplePattern{{0, 1, 2, 3}}});
+    TdlForwardTrainingOptions tdOptions;
+    tdOptions.games = 2;
+    tdOptions.alpha = 0.1;
+    tdOptions.maxMovesPerGame = 8;
+    TdlRandom nonFixedRng(700000U);
+    const auto nonFixedStats = TrainTdlForward(nonFixed, nonFixedRng, tdOptions);
+
+    EXPECT_EQ(nonFixedStats.games, std::size_t {2});
+    EXPECT_TRUE(nonFixedStats.moves > 0);
+
+    NtupleNetwork tcNetwork(PatternSetForPreset(NtuplePreset::Tdl4x6Khyeh));
+    TdlForwardTrainingOptions tcOptions = tdOptions;
+    tcOptions.learningMode = LearningMode::TC;
+    TdlRandom tcRng(700000U);
+    const auto tcStats = TrainTdlForward(tcNetwork, tcRng, tcOptions);
+
+    EXPECT_EQ(tcStats.games, std::size_t {2});
+    EXPECT_TRUE(tcStats.moves > 0);
+    EXPECT_TRUE(tcNetwork.TouchedTcEntries() > 0);
+}
+
+TEST_CASE(TdlFixed6Backend_UpdateMatchesNetworkFastUpdate) {
+    using game2048::ai::Fixed6TdBackend;
+    using game2048::ai::NtupleNetwork;
+    using game2048::ai::NtuplePreset;
+    using game2048::ai::PatternSetForPreset;
+
+    const FastBoard board = FastBoard::FromReference(
+        MakeBoard({{{4, 4, 4, 4}, {4, 4, 4, 4}, {4, 4, 4, 4}, {4, 4, 4, 4}}}));
+    NtupleNetwork network(PatternSetForPreset(NtuplePreset::Tdl4x6Khyeh), 1000.0F);
+    NtupleNetwork backendNetwork(PatternSetForPreset(NtuplePreset::Tdl4x6Khyeh), 1000.0F);
+
+    const auto networkStats = network.UpdateTowardFast(board, 125.0, 0.10, LearningMode::TD, false);
+    Fixed6TdBackend backend(backendNetwork);
+    const auto backendStats = backend.Update(board.Bits(), 125.0, 0.10);
+
+    EXPECT_NEAR(backendStats.before, networkStats.before, 1e-9);
+    EXPECT_NEAR(backendStats.error, networkStats.error, 1e-9);
+    EXPECT_NEAR(backendNetwork.Evaluate(board), network.Evaluate(board), 1e-9);
+}
+
+TEST_CASE(Tdl8x6Backend_UpdateUsesCachedMoveEstimate) {
+    using game2048::ai::NtupleNetwork;
+    using game2048::ai::NtuplePreset;
+    using game2048::ai::PatternSetForPreset;
+    using game2048::ai::Tdl8x6TdBackend;
+
+    const FastBoard board(0x1000211000000ULL);
+    NtupleNetwork backendNetwork(PatternSetForPreset(NtuplePreset::Tdl8x6KMatsuzaki), 320000.0F);
+    NtupleNetwork kernelNetwork(PatternSetForPreset(NtuplePreset::Tdl8x6KMatsuzaki), 320000.0F);
+
+    Tdl8x6TdBackend backend(backendNetwork);
+    const auto move = backend.ChooseBest(board);
+    const auto backendStats = backend.Update(move, move.value + 125.0, 0.10);
+
+    game2048::ai::Tdl8x6Kernel kernel(kernelNetwork.MutableFixed6SingleStageView(LearningMode::TD));
+    const auto kernelMove = kernel.ChooseBest(board);
+    const auto kernelStats = kernel.UpdateKnownValue(kernelMove.board, kernelMove.estimate,
+                                                     kernelMove.value + 125.0, 0.10);
+
+    EXPECT_NEAR(backendStats.before, kernelStats.before, 1e-9);
+    EXPECT_NEAR(backendStats.error, kernelStats.error, 1e-9);
+    EXPECT_NEAR(backendNetwork.Evaluate(FastBoard(move.board)),
+                kernelNetwork.Evaluate(FastBoard(kernelMove.board)), 1e-6);
+}
+
+TEST_CASE(Tdl8x6Kernel_EvaluateMatchesNetworkForCanonicalFixed8x6) {
+    using game2048::ai::NtupleNetwork;
+    using game2048::ai::NtuplePreset;
+    using game2048::ai::PatternSetForPreset;
+    using game2048::ai::Tdl8x6Kernel;
+
+    NtupleNetwork network(PatternSetForPreset(NtuplePreset::Tdl8x6KMatsuzaki), 320000.0F);
+    const FastBoard trained(0x1000211000000ULL);
+    network.UpdateToward(trained, 125000.0, 0.10, LearningMode::TD);
+
+    Tdl8x6Kernel kernel(network.MutableFixed6SingleStageView(LearningMode::TD));
+    const std::array<FastBoard, 3> probes {
+        FastBoard(0x210000000ULL),
+        FastBoard(0x1000211000000ULL),
+        FastBoard(0x123456789ABCDEF0ULL),
+    };
+
+    for (const auto& board : probes) {
+        EXPECT_NEAR(kernel.Evaluate(board.Bits()), network.Evaluate(board), 1e-6);
+    }
+}
+
+TEST_CASE(Tdl8x6Kernel_ReadOnlyViewSupportsCanonicalEvaluation) {
+    using game2048::ai::NtupleNetwork;
+    using game2048::ai::NtuplePreset;
+    using game2048::ai::PatternSetForPreset;
+    using game2048::ai::Tdl8x6Kernel;
+
+    NtupleNetwork network(PatternSetForPreset(NtuplePreset::Tdl8x6KMatsuzaki), 320000.0F);
+    const auto view = network.Fixed6SingleStageView(LearningMode::TD);
+    EXPECT_TRUE(Tdl8x6Kernel::Supports(view));
+
+    const Tdl8x6Kernel kernel(view);
+    const FastBoard board(0x1000211000000ULL);
+    EXPECT_NEAR(kernel.Evaluate(board.Bits()), network.Evaluate(board), 1e-6);
+}
+
+TEST_CASE(TdlBestMove_UsesCanonicalKernelResult) {
+    using game2048::ai::ChooseTdlBestMove;
+    using game2048::ai::NtupleNetwork;
+    using game2048::ai::NtuplePreset;
+    using game2048::ai::PatternSetForPreset;
+    using game2048::ai::Tdl8x6Kernel;
+
+    NtupleNetwork network(PatternSetForPreset(NtuplePreset::Tdl8x6KMatsuzaki), 320000.0F);
+    const FastBoard board(0x1000211000000ULL);
+    const Tdl8x6Kernel kernel(network.Fixed6SingleStageView(LearningMode::TD));
+    const auto kernelMove = kernel.ChooseBest(board);
+    const auto publicMove = ChooseTdlBestMove(board, network);
+
+    EXPECT_TRUE(publicMove.valid);
+    EXPECT_EQ(publicMove.move.board, kernelMove.board);
+    EXPECT_EQ(publicMove.move.scoreDelta, kernelMove.scoreDelta);
+    EXPECT_NEAR(publicMove.value, kernelMove.value, 1e-6);
+}
+
+TEST_CASE(Tdl8x6Kernel_UpdateMatchesNetworkForCanonicalFixed8x6) {
+    using game2048::ai::NtupleNetwork;
+    using game2048::ai::NtuplePreset;
+    using game2048::ai::PatternSetForPreset;
+    using game2048::ai::Tdl8x6Kernel;
+
+    const FastBoard board(0x1000211000000ULL);
+    NtupleNetwork generic(PatternSetForPreset(NtuplePreset::Tdl8x6KMatsuzaki), 320000.0F);
+    NtupleNetwork kernelNetwork(PatternSetForPreset(NtuplePreset::Tdl8x6KMatsuzaki), 320000.0F);
+
+    const auto genericStats = generic.UpdateToward(board, 125000.0, 0.10, LearningMode::TD);
+    Tdl8x6Kernel kernel(kernelNetwork.MutableFixed6SingleStageView(LearningMode::TD));
+    const auto kernelStats = kernel.Update(board.Bits(), 125000.0, 0.10);
+
+    EXPECT_NEAR(kernelStats.before, genericStats.before, 1e-6);
+    EXPECT_NEAR(kernelStats.error, genericStats.error, 1e-6);
+    EXPECT_NEAR(kernelNetwork.Evaluate(board), generic.Evaluate(board), 1e-6);
+}
+
+TEST_CASE(Tdl8x6Kernel_RejectsNonCanonicalOffsets) {
+    using game2048::ai::NtupleNetwork;
+    using game2048::ai::NtuplePreset;
+    using game2048::ai::NtupleMutableFixed6View;
+    using game2048::ai::PatternSetForPreset;
+    using game2048::ai::Tdl8x6Kernel;
+
+    NtupleNetwork network(PatternSetForPreset(NtuplePreset::Tdl8x6KMatsuzaki), 320000.0F);
+    const auto view = network.MutableFixed6SingleStageView(LearningMode::TD);
+    EXPECT_TRUE(Tdl8x6Kernel::Supports(view));
+    std::array<std::size_t, 8> offsets {};
+    for (std::size_t index = 0; index < offsets.size(); ++index) {
+        offsets[index] = view.patternOffsets[index];
+    }
+    ++offsets[3];
+
+    bool rejected = false;
+    try {
+        const NtupleMutableFixed6View badView {
+            view.weights,
+            offsets.data(),
+            view.shifts,
+            view.patternCount,
+            view.valid,
+        };
+        EXPECT_FALSE(Tdl8x6Kernel::Supports(badView));
+        Tdl8x6Kernel kernel(badView);
+        (void)kernel;
+    } catch (const std::invalid_argument&) {
+        rejected = true;
+    }
+
+    EXPECT_TRUE(rejected);
 }
 
 TEST_CASE(NtupleNetwork_Multistage_Uses_Dense_StageCopies) {

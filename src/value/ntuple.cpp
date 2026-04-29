@@ -439,7 +439,7 @@ double NtupleNetwork::Evaluate(const FastBoard& board) const {
     if (patternSet_.useFixedPath && !fixedShifts6_.empty()) {
         return EvaluateFixedPath(stage, board);
     }
-    double value = 0.0;
+    float value = 0.0F;
     for (std::size_t index = 0; index < patterns_.size(); ++index) {
         if (patternSet_.useD4) {
             for (int transform = 0; transform < 8; ++transform) {
@@ -450,7 +450,7 @@ double NtupleNetwork::Evaluate(const FastBoard& board) const {
             value += WeightAt(stage, patternOffsets_[index] + KeyFor(board, patterns_[index]));
         }
     }
-    return value;
+    return static_cast<double>(value);
 }
 
 std::vector<std::size_t> NtupleNetwork::FeatureKeysForBoard(const FastBoard& board) const {
@@ -479,7 +479,7 @@ NtupleUpdateStats NtupleNetwork::UpdateToward(const FastBoard& board, double tar
 }
 
 NtupleUpdateStats NtupleNetwork::UpdateTowardFast(const FastBoard& board, double target, double alpha,
-                                                 LearningMode mode) {
+                                                 LearningMode mode, bool computeAfter) {
     const std::size_t stage = StageFor(board);
     if (stage > 0 && !promotedStages_[stage]) {
         PromoteStageFromPrevious(stage);
@@ -492,27 +492,27 @@ NtupleUpdateStats NtupleNetwork::UpdateTowardFast(const FastBoard& board, double
     const std::size_t accessCount = patterns_.size() * (patternSet_.useD4 ? 8U : 1U);
     if (patternSet_.useFixedPath && !fixedShifts6_.empty()) {
         std::array<std::size_t, 128> fixedKeys {};
-        const std::size_t keyCount = ntuple_kernel::CollectFixed6Keys(board.Bits(), fixedOffsets_.data(),
-                                                                      fixedShifts6_.data(), fixedOffsets_.size(),
-                                                                      fixedKeys.data());
-        const auto& weights = stageValues_[stage];
+        auto& weights = stageValues_[stage];
         double before = 0.0;
-        for (std::size_t index = 0; index < keyCount; ++index) {
-            before += weights[fixedKeys[index]];
-        }
-        const double error = target - before;
-        const double delta = alpha * error / static_cast<double>(keyCount);
+        const std::size_t keyCount =
+            ntuple_kernel::CollectFixed6KeysAndValue(board.Bits(), weights.data(), fixedOffsets_.data(),
+                                                     fixedShifts6_.data(), fixedOffsets_.size(),
+                                                     fixedKeys.data(), before);
+        const float error = static_cast<float>(target) - static_cast<float>(before);
+        const float delta = static_cast<float>(alpha) * error / static_cast<float>(keyCount);
         ApplyCollectedWeightDeltas(stage, fixedKeys.data(), keyCount, delta, mode);
-        double after = 0.0;
-        for (std::size_t index = 0; index < keyCount; ++index) {
-            after += weights[fixedKeys[index]];
+        float after = 0.0F;
+        if (computeAfter) {
+            for (std::size_t index = 0; index < keyCount; ++index) {
+                after += weights[fixedKeys[index]];
+            }
         }
         return {before, after, error};
     }
 
     const double before = Evaluate(board);
-    const double error = target - before;
-    const double delta = alpha * error / static_cast<double>(accessCount);
+    const float error = static_cast<float>(target) - static_cast<float>(before);
+    const float delta = static_cast<float>(alpha) * error / static_cast<float>(accessCount);
     for (std::size_t index = 0; index < patterns_.size(); ++index) {
         const int transforms = patternSet_.useD4 ? 8 : 1;
         for (int transform = 0; transform < transforms; ++transform) {
@@ -521,7 +521,7 @@ NtupleUpdateStats NtupleNetwork::UpdateTowardFast(const FastBoard& board, double
             ApplyWeightDelta(stage, weightIndex, delta, mode);
         }
     }
-    return {before, Evaluate(board), error};
+    return {before, computeAfter ? Evaluate(board) : 0.0, error};
 }
 
 void NtupleNetwork::Save(const std::string& path) const {
@@ -632,6 +632,9 @@ std::size_t NtupleNetwork::StageCount() const {
 }
 
 std::size_t NtupleNetwork::StageFor(const FastBoard& board) const {
+    if (stageBoundaries_.empty()) {
+        return 0;
+    }
     const int rank = board.MaxRank();
     for (std::size_t index = 0; index < stageBoundaries_.size(); ++index) {
         if (rank < stageBoundaries_[index]) {
@@ -696,6 +699,26 @@ void NtupleNetwork::SetProfileMetadata(std::string metadata) {
 
 const NtuplePatternSet& NtupleNetwork::PatternSet() const {
     return patternSet_;
+}
+
+NtupleFixed6View NtupleNetwork::Fixed6SingleStageView(LearningMode mode) const {
+    if (mode != LearningMode::TD || StageCount() != 1U || !patternSet_.useFixedPath ||
+        fixedShifts6_.empty() || fixedOffsets_.empty() || stageValues_.empty() || stageValues_[0].empty()) {
+        return {};
+    }
+    return {stageValues_[0].data(), fixedOffsets_.data(), fixedShifts6_.data(), fixedOffsets_.size(), true};
+}
+
+NtupleMutableFixed6View NtupleNetwork::MutableFixed6SingleStageView(LearningMode mode) {
+    if (mode != LearningMode::TD || StageCount() != 1U || !patternSet_.useFixedPath ||
+        fixedShifts6_.empty() || fixedOffsets_.empty()) {
+        return {};
+    }
+    EnsureStage(0);
+    if (stageValues_.empty() || stageValues_[0].empty()) {
+        return {};
+    }
+    return {stageValues_[0].data(), fixedOffsets_.data(), fixedShifts6_.data(), fixedOffsets_.size(), true};
 }
 
 NtupleNetwork NtupleNetwork::Load(const std::string& path) {
@@ -895,12 +918,12 @@ double NtupleNetwork::EvaluateFixedPath(std::size_t stage, const FastBoard& boar
 }
 
 void NtupleNetwork::ApplyCollectedWeightDeltas(std::size_t stage, const std::size_t* keys,
-                                               std::size_t keyCount, double delta, LearningMode mode) {
+                                               std::size_t keyCount, float delta, LearningMode mode) {
     auto& weights = stageValues_[stage];
     if (!UsesTc(mode)) {
         for (std::size_t index = 0; index < keyCount; ++index) {
             const std::size_t key = keys[index];
-            weights[key] = static_cast<float>(static_cast<double>(weights[key]) + delta);
+            weights[key] += delta;
         }
         return;
     }
@@ -910,25 +933,22 @@ void NtupleNetwork::ApplyCollectedWeightDeltas(std::size_t stage, const std::siz
         const std::size_t key = keys[index];
         auto [entry, inserted] = tcStage.try_emplace(key, TcEntry {kTcInitial, kTcInitial});
         TcEntry& tc = entry->second;
-        const double adjustedDelta = delta * (std::abs(static_cast<double>(tc.accum)) /
-                                              static_cast<double>(tc.updvu));
-        tc.accum += static_cast<float>(delta);
-        tc.updvu += static_cast<float>(std::abs(delta));
-        weights[key] = static_cast<float>(static_cast<double>(weights[key]) + adjustedDelta);
+        const float adjustedDelta = delta * (std::abs(tc.accum) / tc.updvu);
+        tc.accum += delta;
+        tc.updvu += std::abs(delta);
+        weights[key] += adjustedDelta;
     }
 }
 
-void NtupleNetwork::ApplyWeightDelta(std::size_t stage, std::size_t weightIndex, double delta, LearningMode mode) {
-    double adjustedDelta = delta;
+void NtupleNetwork::ApplyWeightDelta(std::size_t stage, std::size_t weightIndex, float delta, LearningMode mode) {
+    float adjustedDelta = delta;
     if (UsesTc(mode)) {
         TcEntry& tc = TcAt(stage, weightIndex);
-        adjustedDelta = delta * (std::abs(static_cast<double>(tc.accum)) /
-                                 static_cast<double>(tc.updvu));
-        tc.accum += static_cast<float>(delta);
-        tc.updvu += static_cast<float>(std::abs(delta));
+        adjustedDelta = delta * (std::abs(tc.accum) / tc.updvu);
+        tc.accum += delta;
+        tc.updvu += std::abs(delta);
     }
-    stageValues_[stage][weightIndex] = static_cast<float>(static_cast<double>(stageValues_[stage][weightIndex]) +
-                                                          adjustedDelta);
+    stageValues_[stage][weightIndex] += adjustedDelta;
 }
 
 std::size_t NtupleNetwork::StageForRead(std::size_t stage) const {

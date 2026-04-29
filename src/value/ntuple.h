@@ -57,6 +57,22 @@ struct NtupleUpdateStats {
     double error = 0.0;
 };
 
+struct NtupleFixed6View {
+    const float* weights = nullptr;
+    const std::size_t* patternOffsets = nullptr;
+    const std::uint8_t* shifts = nullptr;
+    std::size_t patternCount = 0;
+    bool valid = false;
+};
+
+struct NtupleMutableFixed6View {
+    float* weights = nullptr;
+    const std::size_t* patternOffsets = nullptr;
+    const std::uint8_t* shifts = nullptr;
+    std::size_t patternCount = 0;
+    bool valid = false;
+};
+
 class NtupleNetwork {
 public:
     NtupleNetwork();
@@ -71,7 +87,8 @@ public:
     std::vector<std::size_t> FeatureKeysForBoard(const FastBoard& board) const;
     NtupleUpdateStats UpdateToward(const FastBoard& board, double target, double alpha);
     NtupleUpdateStats UpdateToward(const FastBoard& board, double target, double alpha, LearningMode mode);
-    NtupleUpdateStats UpdateTowardFast(const FastBoard& board, double target, double alpha, LearningMode mode);
+    NtupleUpdateStats UpdateTowardFast(const FastBoard& board, double target, double alpha, LearningMode mode,
+                                       bool computeAfter = true);
     void Save(const std::string& path) const;
 
     const std::vector<NtuplePattern>& Patterns() const;
@@ -86,6 +103,8 @@ public:
     const std::string& ProfileMetadata() const;
     void SetProfileMetadata(std::string metadata);
     const NtuplePatternSet& PatternSet() const;
+    NtupleFixed6View Fixed6SingleStageView(LearningMode mode = LearningMode::TD) const;
+    NtupleMutableFixed6View MutableFixed6SingleStageView(LearningMode mode = LearningMode::TD);
 
     static NtupleNetwork Load(const std::string& path);
 
@@ -96,8 +115,8 @@ private:
     void BuildFixedPathCache();
     double EvaluateFixedPath(std::size_t stage, const FastBoard& board) const;
     void ApplyCollectedWeightDeltas(std::size_t stage, const std::size_t* keys,
-                                    std::size_t keyCount, double delta, LearningMode mode);
-    void ApplyWeightDelta(std::size_t stage, std::size_t weightIndex, double delta, LearningMode mode);
+                                    std::size_t keyCount, float delta, LearningMode mode);
+    void ApplyWeightDelta(std::size_t stage, std::size_t weightIndex, float delta, LearningMode mode);
     void EnsureStage(std::size_t stage);
     void EnsureTcStage(std::size_t stage);
     float WeightAt(std::size_t stage, std::size_t index) const;

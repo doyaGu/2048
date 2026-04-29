@@ -12,6 +12,15 @@ option(GAME2048_BUILD_GUI "Build raylib GUI executable" ON)
 option(GAME2048_ENABLE_WARNINGS "Enable strict compiler warnings" ON)
 option(GAME2048_NATIVE_OPT "Enable native CPU optimizations for release builds" OFF)
 option(GAME2048_ENABLE_AVX512 "Enable AVX512 n-tuple kernels when supported" ON)
+option(GAME2048_ENABLE_LTO "Enable interprocedural optimization for release builds" OFF)
+
+if (GAME2048_ENABLE_LTO)
+    include(CheckIPOSupported)
+    check_ipo_supported(RESULT GAME2048_LTO_SUPPORTED OUTPUT GAME2048_LTO_ERROR)
+    if (NOT GAME2048_LTO_SUPPORTED)
+        message(FATAL_ERROR "GAME2048_ENABLE_LTO is not supported by this toolchain: ${GAME2048_LTO_ERROR}")
+    endif()
+endif()
 
 function(game2048_apply_warnings target_name)
     if (NOT GAME2048_ENABLE_WARNINGS)
@@ -30,10 +39,17 @@ function(game2048_apply_native_opt target_name)
     endif()
 endfunction()
 
+function(game2048_apply_lto target_name)
+    if (GAME2048_ENABLE_LTO)
+        set_property(TARGET ${target_name} PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+    endif()
+endfunction()
+
 function(game2048_configure_target target_name)
     target_include_directories(${target_name} PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
     game2048_apply_warnings(${target_name})
     game2048_apply_native_opt(${target_name})
+    game2048_apply_lto(${target_name})
 endfunction()
 
 function(game2048_configure_raylib)
@@ -75,6 +91,9 @@ game2048_configure_target(game2048_core)
 add_library(game2048_value
     src/value/ntuple_kernel.cpp
     src/value/ntuple.cpp
+    src/value/tdl8x6_kernel.cpp
+    src/value/tdl_types.cpp
+    src/value/tdl_training_backend.cpp
     src/value/tdl_compat.cpp
     src/search/evaluator.cpp
     src/search/greedy.cpp
@@ -175,6 +194,7 @@ if (GAME2048_BUILD_TESTS)
     target_link_libraries(game2048_cli_tests PRIVATE game2048_cli_lib)
     game2048_configure_target(game2048_cli_tests)
     add_test(NAME game2048_cli_tests COMMAND game2048_cli_tests)
+    set_tests_properties(game2048_cli_tests PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
 endif()
 
 if (GAME2048_BUILD_TESTS AND GAME2048_BUILD_GUI)
@@ -197,4 +217,5 @@ if (GAME2048_BUILD_TESTS AND GAME2048_BUILD_GUI)
     target_link_libraries(game2048_tests PRIVATE game2048_gui_lib)
     game2048_configure_target(game2048_tests)
     add_test(NAME game2048_tests COMMAND game2048_tests)
+    set_tests_properties(game2048_tests PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
 endif()

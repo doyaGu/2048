@@ -31,4 +31,13 @@ double EvaluateFixed6(std::uint64_t boardBits,
                       std::size_t patternCount,
                       KernelKind kind = KernelKind::Auto);
 
+std::size_t CollectFixed6KeysAndValue(std::uint64_t boardBits,
+                                      const float* weights,
+                                      const std::size_t* patternOffsets,
+                                      const std::uint8_t* shifts,
+                                      std::size_t patternCount,
+                                      std::size_t* outKeys,
+                                      double& value,
+                                      KernelKind kind = KernelKind::Auto);
+
 }  // namespace game2048::ai::ntuple_kernel

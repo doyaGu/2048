@@ -140,6 +140,8 @@ cmake --build build-server --target game2048_cli
 
 For a machine-specific optimized binary, add `-DGAME2048_NATIVE_OPT=ON`. This enables native CPU flags such as `-march=native` in Release builds.
 
+For training-server binaries, also measure `-DGAME2048_ENABLE_LTO=ON` to enable Release interprocedural optimization. It can improve hot C++ call paths, but may increase link time and should be validated per machine.
+
 ## Run
 
 Interactive mode:
@@ -166,6 +168,22 @@ SMOKE=1 scripts/train_ntuple_pipeline.sh
 MAX_JOBS=4 PROFILE=profiles/ntuple_server.toml scripts/server_train_matrix.sh
 ```
 
+CPU training measurements:
+
+```bash
+scripts/measure_cpu_training.sh
+MICRO_REPEATS=7 PARITY_REPEATS=3 scripts/measure_cpu_training.sh
+GAME2048_ENABLE_LTO=ON BUILD_DIR=build-server-lto-measure scripts/measure_cpu_training.sh
+scripts/measure_parity_stability.sh
+scripts/measure_tdl2048_baseline.sh
+scripts/build_pgo_cli.sh
+```
+
+The measurement script builds the headless CLI, runs CLI tests by default, repeats `microbench`, optionally repeats `parity`, and writes per-run CSV/log artifacts plus min/median/max summary stats under `artifacts/cpu-measurements`. Parity summaries include both `train_games_per_sec` and the TDL2048+-comparable `train_moves_per_sec`.
+Use `scripts/measure_parity_stability.sh` for close TDL parity comparisons. It wraps serial parity runs in `/usr/bin/time -l`, records warmups separately, and summarizes wall time, user/sys time, retired instructions when the platform reports them, and peak memory under `artifacts/parity-stability`.
+The TDL2048 baseline script builds a disposable patched copy of `/Users/touyou/workspace/TDL2048` with GCC and records its 8x6 single-thread training `ops` for comparison.
+The PGO script builds an instrumented CLI, runs the configured microbench/parity workload, merges profile data with `llvm-profdata`, rebuilds a profile-guided CLI, runs CLI tests, and measures the final PGO CLI. Treat PGO as an experimental comparison until its workload is validated against your long training profile; LTO has been the more reliable default on the current Apple M4 baseline.
+
 Training is profile-driven. Each run writes `config.toml`, `manifest.json`, `train.log`, `bench.txt`, `metrics.csv`, `phase-*.weights`, and `best.weights` under the profile artifact directory. Matrix runs summarize jobs in `summary.csv` and copy the selected global best to `best/best.weights`.
 
 Profiles use the current V5 training schema. The relevant AI sections look like:
@@ -184,6 +202,10 @@ stage_boundaries = [11, 12, 13, 14, 15]
 
 [value.storage]
 mode = "dense-stage"
+
+[trainer]
+mode = "tdl-forward-td"
+fast_path = true # explicit TDL 8x6 single-stage TD fast path
 ```
 
 Weight files use the V5 `G2048NT5` chunked format and are not compatible with older V4 files.

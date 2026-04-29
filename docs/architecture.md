@@ -21,7 +21,11 @@ Owns deterministic rules and state primitives: `Board`, `FastBoard`, `PackedBoar
 
 ### `src/value`
 
-Owns n-tuple value functions, presets, weight serialization, multistage storage, and fixed-pattern kernel dispatch. It depends on `core` and shared stats/types, and exposes value estimators used by search and training.
+Owns generic n-tuple value functions, presets, weight serialization, multistage storage, and fixed-pattern kernel primitives. It depends on `core` and shared stats/types, and exposes value estimators used by search and TDL.
+
+### `src/tdl`
+
+Owns temporal-difference 2048 training and evaluation. Public entry points live in `tdl/api.h`; shared RNG/options live in `tdl/types.h`; backend implementations keep canonical TDL8x6, generic fixed-6 TD, and conservative network fallback paths separate under one shared afterstate training loop. This layer depends on `core` and `value`, and is the only layer that dispatches between TDL backends.
 
 ### `src/search`
 
@@ -33,7 +37,7 @@ Owns benchmark execution and training-result selection policy. It depends on `se
 
 ### `src/experiment`
 
-Owns TOML profile parsing, profile execution, matrix expansion, and artifact writing for training, benchmark, inspect, and matrix workflows. It depends on `training`, `search`, and `value`, and is the highest headless orchestration layer.
+Owns TOML profile parsing, profile execution, matrix expansion, and artifact writing for training, benchmark, inspect, and matrix workflows. It depends on `training`, `search`, `value`, and `tdl`, and is the highest headless orchestration layer.
 
 ### `src/cli`
 
@@ -77,6 +81,7 @@ Train, bench, matrix, microbench, and inspect modes bypass raylib entirely throu
 
 - `game2048_core`: rules, boards, RNG, shared stats
 - `game2048_value`: n-tuple value functions and evaluator support
+- `game2048_tdl`: TDL public API, shared training loop, and TDL backends
 - `game2048_search`: greedy, expectimax, transposition table, and AI engine
 - `game2048_training`: benchmark runner and checkpoint selection
 - `game2048_experiment`: profile parsing, matrix expansion, and artifact orchestration
@@ -98,10 +103,15 @@ Only `src/` is exported as the include root. Internal includes should remain roo
 - CLI tests validate subcommand parsing for `play`, `train`, `bench`, `matrix`, `microbench`, and `inspect`.
 - Experiment tests validate profile parsing, matrix expansion, selection policy, and artifact behavior.
 
+## Performance Validation
+
+TDL throughput acceptance uses remote same-session control/candidate runs on `touyou@touyou.org`. Local MacBook Air measurements are only smoke checks because thermal variability can swamp small changes. Structural TDL refactors must preserve the canonical TDL8x6 hot path unless a remote candidate median stays within the accepted regression budget.
+
 ## Forbidden Crossings
 
 - `core` must not know about overlays, panels, input devices, raylib, search, training, or experiments.
-- `value` and `search` must not own session state or UI/runtime control flow.
+- `value`, `tdl`, and `search` must not own session state or UI/runtime control flow.
+- `value` must not dispatch TDL training policy; TDL-specific backend selection belongs in `tdl`.
 - `training` and `experiment` must stay raylib-free.
 - `input` must not mutate gameplay directly.
 - `ui` must not call `Game`, `AIEngine`, or `RuntimeEngine`.
